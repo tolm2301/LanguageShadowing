@@ -424,6 +424,7 @@ async function fetchTranscript(videoId, targetLang = null) {
   let selectedTrack = null;
   let transcript = [];
 
+  let lastErrors = [];
   // Method 1: youtube-transcript-nodejs with AutoPoTokenProvider
   if (ytNodeApi) {
     try {
@@ -463,10 +464,15 @@ async function fetchTranscript(videoId, targetLang = null) {
             };
           }
         }
+      } else {
+        lastErrors.push('ytNodeApi: list returned 0 transcripts');
       }
     } catch (nodeErr) {
+      lastErrors.push(`ytNodeApi error: ${nodeErr.message} (${nodeErr.name})`);
       console.warn('ytNodeApi.fetch error:', nodeErr.message);
     }
+  } else {
+    lastErrors.push('ytNodeApi: not initialized');
   }
 
   // Method 2: High-reliability modern youtube-transcript-plus engine
@@ -529,6 +535,7 @@ async function fetchTranscript(videoId, targetLang = null) {
         }
       }
     } catch (err) {
+      lastErrors.push(`ytPlus error: ${err.message}`);
       console.warn('ytPlus.fetchTranscript error:', err.message);
     }
   }
@@ -588,6 +595,7 @@ async function fetchTranscript(videoId, targetLang = null) {
       tracks: tracks || [],
       selectedTrack: null,
       transcript: [],
+      debugErrors: lastErrors,
       error: 'Không tìm thấy phụ đề tự động trên YouTube cho video này. Bạn có thể tự thêm file phụ đề SRT/VTT bên dưới để học.',
     };
   }
