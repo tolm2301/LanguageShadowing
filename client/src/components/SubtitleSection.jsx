@@ -38,7 +38,6 @@ export default function SubtitleSection({
   isAutoPaused = false,
   onResumeAfterAutoPause,
   onOpenTranscriptDrawer,
-  onOpenCustomSubModal,
   selectedLang = 'en',
   isBlindMode: propBlindMode,
   onToggleBlindMode,
@@ -325,16 +324,7 @@ export default function SubtitleSection({
                   {transcript.length > 0 ? (
                     <span>Đang chờ câu thoại tiếp theo...</span>
                   ) : (
-                    <div className="flex flex-col items-center gap-1.5">
-                      <p className="text-slate-400">Chưa có phụ đề tự động cho video này.</p>
-                      <button
-                        type="button"
-                        onClick={onOpenCustomSubModal}
-                        className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
-                      >
-                        + Nhập phụ đề SRT/VTT thủ công
-                      </button>
-                    </div>
+                    <p className="text-slate-400">Chưa có phụ đề cho video này.</p>
                   )}
                 </div>
               )}

@@ -4,7 +4,6 @@ import YouTubePlayer from './components/YouTubePlayer';
 import RangeBar from './components/RangeBar';
 import SubtitleSection from './components/SubtitleSection';
 import TranscriptDrawer from './components/TranscriptDrawer';
-import CustomSubModal from './components/CustomSubModal';
 import ShortcutsModal from './components/ShortcutsModal';
 import { LANGUAGES, formatTime, PLAYBACK_SPEEDS } from './constants';
 import {
@@ -76,7 +75,6 @@ function App() {
 
   // Modals state
   const [isTranscriptDrawerOpen, setIsTranscriptDrawerOpen] = useState(false);
-  const [isCustomSubModalOpen, setIsCustomSubModalOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
 
   const playerRef = useRef(null);
@@ -566,24 +564,14 @@ function App() {
 
         {/* Subtitle Warning Banner if no auto-captions */}
         {errorMsg && (
-          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-300">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">{errorMsg}</p>
-                <p className="text-amber-400/80 mt-0.5">
-                  Mẹo: Bạn có thể copy lời thoại trực tiếp từ YouTube (bấm ... ➔ Hiện bản ghi lời thoại) hoặc tải file .srt/.vtt để học ngay!
-                </p>
-              </div>
+          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-300">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">{errorMsg}</p>
+              <p className="text-amber-400/80 mt-0.5">
+                Vui lòng thử chọn một trong các bài học mẫu 5 thứ tiếng ở trên hoặc đổi một video khác có bật phụ đề.
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsCustomSubModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>+ Dán lời thoại / SRT</span>
-            </button>
           </div>
         )}
 
@@ -606,7 +594,6 @@ function App() {
           isAutoPaused={isAutoPaused}
           onResumeAfterAutoPause={handleResumeAfterAutoPause}
           onOpenTranscriptDrawer={() => setIsTranscriptDrawerOpen(true)}
-          onOpenCustomSubModal={() => setIsCustomSubModalOpen(true)}
           selectedLang={selectedLang}
           isBlindMode={isBlindMode}
           onToggleBlindMode={handleToggleBlindMode}
@@ -626,15 +613,6 @@ function App() {
             >
               <Keyboard className="w-3.5 h-3.5 text-indigo-400" />
               <span>Phím tắt (Bấm <strong>?</strong>)</span>
-            </button>
-            <span>•</span>
-            <button
-              type="button"
-              onClick={() => setIsCustomSubModalOpen(true)}
-              className="flex items-center gap-1.5 hover:text-slate-300 transition cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5 text-slate-400" />
-              <span>Tải phụ đề ngoài (.srt / .vtt)</span>
             </button>
           </div>
 
@@ -656,16 +634,6 @@ function App() {
             if (sub) setLockedSentence(sub);
           }
           handleSeek(seconds);
-        }}
-      />
-
-      {/* Custom Subtitle SRT/VTT Modal */}
-      <CustomSubModal
-        isOpen={isCustomSubModalOpen}
-        onClose={() => setIsCustomSubModalOpen(false)}
-        onImportSubtitles={(customTrans) => {
-          setTranscript(customTrans);
-          setErrorMsg('');
         }}
       />
 
