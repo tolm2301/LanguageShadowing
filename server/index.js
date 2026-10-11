@@ -165,15 +165,18 @@ app.post('/api/translate', async (req, res) => {
 });
 
 // Serve static frontend in production if built
+const fs = require('fs');
+const rootDistPath = path.join(__dirname, '..', 'dist');
 const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
-app.use(express.static(clientDistPath));
+const distPath = fs.existsSync(rootDistPath) ? rootDistPath : clientDistPath;
+app.use(express.static(distPath));
 
 // Fallback for SPA routing (avoid path-to-regexp '*' issues)
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  const indexPath = path.join(clientDistPath, 'index.html');
+  const indexPath = path.join(distPath, 'index.html');
   res.sendFile(indexPath, (err) => {
     if (err) {
       res.status(200).send('Shadowing App Backend is running. Please start the Vite client in development or run npm run build.');
