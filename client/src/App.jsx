@@ -5,7 +5,9 @@ import RangeBar from './components/RangeBar';
 import SubtitleSection from './components/SubtitleSection';
 import TranscriptDrawer from './components/TranscriptDrawer';
 import ShortcutsModal from './components/ShortcutsModal';
+import BackendSettingsModal from './components/BackendSettingsModal';
 import { LANGUAGES, formatTime, PLAYBACK_SPEEDS } from './constants';
+import { getApiEndpoint, getBackendUrl } from './utils/api';
 import {
   getSavedCurrentLang,
   saveCurrentLang,
@@ -21,7 +23,8 @@ import {
   HelpCircle,
   Volume2,
   ExternalLink,
-  Info
+  Info,
+  Server
 } from 'lucide-react';
 
 function App() {
@@ -76,6 +79,7 @@ function App() {
   // Modals state
   const [isTranscriptDrawerOpen, setIsTranscriptDrawerOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const [isBackendModalOpen, setIsBackendModalOpen] = useState(false);
 
   const playerRef = useRef(null);
 
@@ -100,7 +104,7 @@ function App() {
 
     try {
       // 1. Fetch Video Info (with browser oEmbed fallback)
-      fetch(`/api/video-info?videoId=${vId}`)
+      fetch(getApiEndpoint(`/api/video-info?videoId=${vId}`))
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.title) {
@@ -134,12 +138,12 @@ function App() {
         .catch(() => {});
 
       // 2. Fetch Transcript
-      const resp = await fetch(`/api/transcript?videoId=${vId}&lang=${langCode || selectedLang}`);
+      const resp = await fetch(getApiEndpoint(`/api/transcript?videoId=${vId}&lang=${langCode || selectedLang}`));
       
       const contentType = resp.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
         throw new Error(
-          `Máy chủ API trả về mã HTTP ${resp.status} (không phải JSON). Vui lòng kiểm tra lại cấu hình Serverless Functions trên Vercel.`
+          `Máy chủ API trả về mã HTTP ${resp.status} (không phải JSON). Vui lòng kiểm tra lại dịch vụ Backend trên Render.`
         );
       }
 
@@ -160,12 +164,16 @@ function App() {
         if (data.error) {
           setErrorMsg(data.error);
         } else {
-          setErrorMsg('Không tìm thấy phụ đề tự động trên YouTube cho ngôn ngữ này. Bạn có thể tự thêm phụ đề bên dưới.');
+          setErrorMsg('Không tìm thấy phụ đề tự động trên YouTube cho ngôn ngữ này. Vui lòng chọn video khác có phụ đề.');
         }
       }
     } catch (err) {
       console.error('Error fetching transcript:', err);
-      setErrorMsg(err.message || 'Không thể kết nối đến máy chủ lấy phụ đề.');
+      const backend = getBackendUrl();
+      const hint = backend
+        ? `Không thể kết nối đến Backend Render (${backend}). Máy chủ miễn phí có thể đang khởi động lại (mất ~30s).`
+        : `Chưa kết nối Backend Render hoặc máy chủ chưa sẵn sàng. Bạn có thể bấm "Backend Render" ở góc trên để cài đặt link.`;
+      setErrorMsg(err.message || hint);
       setTranscript([]);
     } finally {
       setIsLoading(false);
@@ -500,7 +508,7 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center py-6 px-4 md:px-8 selection:bg-indigo-500 selection:text-white">
       <div className="w-full max-w-5xl">
-        {/* TOP: Header, Link Input, Language Selector, Choose Long */}
+        {/* TOP: Header, Link Input, Language Selector */}
         <HeaderInput
           selectedLang={selectedLang}
           onSelectLang={handleSelectLang}
@@ -508,12 +516,7 @@ function App() {
           setInputUrl={setInputUrl}
           onLoadVideo={handleLoadVideo}
           isLoading={isLoading}
-          selectedDuration={selectedDuration}
-          onSelectDuration={handleSelectDuration}
-          rangeStart={rangeStart}
-          rangeEnd={rangeEnd}
-          videoDuration={videoDuration}
-          onSetCustomRange={handleChangeRange}
+          onOpenBackendSettings={() => setIsBackendModalOpen(true)}
         />
 
         {/* Video Info Title Banner */}
@@ -564,14 +567,23 @@ function App() {
 
         {/* Subtitle Warning Banner if no auto-captions */}
         {errorMsg && (
-          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-300">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">{errorMsg}</p>
-              <p className="text-amber-400/80 mt-0.5">
-                Vui lòng thử chọn một trong các bài học mẫu 5 thứ tiếng ở trên hoặc đổi một video khác có bật phụ đề.
-              </p>
+          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start justify-between gap-3 text-xs text-amber-300">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">{errorMsg}</p>
+                <p className="text-amber-400/80 mt-0.5">
+                  Vui lòng thử chọn một trong các bài học mẫu 5 thứ tiếng ở trên, hoặc kiểm tra kết nối Backend Render.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsBackendModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold whitespace-nowrap transition cursor-pointer shrink-0"
+            >
+              Cấu hình Backend
+            </button>
           </div>
         )}
 
@@ -605,7 +617,7 @@ function App() {
 
         {/* Ergonomic Quick Footer Toolbar */}
         <footer className="mt-8 pt-4 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={() => setIsShortcutsModalOpen(true)}
@@ -613,6 +625,14 @@ function App() {
             >
               <Keyboard className="w-3.5 h-3.5 text-indigo-400" />
               <span>Phím tắt (Bấm <strong>?</strong>)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsBackendModalOpen(true)}
+              className="flex items-center gap-1.5 hover:text-purple-300 text-slate-400 transition cursor-pointer"
+            >
+              <Server className="w-3.5 h-3.5 text-purple-400" />
+              <span>Cấu hình Backend (Render)</span>
             </button>
           </div>
 
@@ -641,6 +661,13 @@ function App() {
       <ShortcutsModal
         isOpen={isShortcutsModalOpen}
         onClose={() => setIsShortcutsModalOpen(false)}
+      />
+
+      {/* Backend Settings Modal */}
+      <BackendSettingsModal
+        isOpen={isBackendModalOpen}
+        onClose={() => setIsBackendModalOpen(false)}
+        onBackendSaved={() => loadVideoData(videoId)}
       />
     </div>
   );

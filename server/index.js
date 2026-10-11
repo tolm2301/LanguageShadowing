@@ -6,14 +6,18 @@ const {
   fetchTranscript,
   getVideoInfo,
   getVideoCaptionTracks,
-  parseSrtOrVtt,
   translateToVietnamese,
 } = require('./transcript');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// Enable CORS for all origins (allows Vercel frontend to communicate with Render backend)
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -50,6 +54,25 @@ const SAMPLE_VIDEOS = {
     description: 'Giọng đọc tiếng Thái chậm, phát âm rõ từng thanh điệu, cực kỳ dễ học.',
   },
 };
+
+// Health check endpoints for Render
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'YouTube Shadowing Backend API',
+    platform: 'Render',
+    uptime: `${Math.floor(process.uptime())}s`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
 
 // API: Get sample videos
 app.get('/api/samples', (req, res) => {
@@ -124,32 +147,6 @@ app.get('/api/caption-tracks', async (req, res) => {
   }
 });
 
-// API: Parse custom SRT or VTT text and translate to Vietnamese
-app.post('/api/parse-subtitles', async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: 'Text content is required' });
-    }
-    let transcript = parseSrtOrVtt(text);
-    if (transcript.length > 0) {
-      try {
-        const rawTexts = transcript.map(t => t.text);
-        const viTranslations = await translateToVietnamese(rawTexts);
-        transcript = transcript.map((item, idx) => ({
-          ...item,
-          textVi: viTranslations[idx] || item.text,
-        }));
-      } catch (err) {
-        console.warn('Translate custom sub error:', err.message);
-      }
-    }
-    res.json({ transcript, count: transcript.length });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // API: Translate on-demand to Vietnamese
 app.post('/api/translate', async (req, res) => {
   try {
@@ -164,29 +161,27 @@ app.post('/api/translate', async (req, res) => {
   }
 });
 
-// Serve static frontend in production if built
+// Serve static frontend if running locally as a combined monolithic app
 const fs = require('fs');
 const rootDistPath = path.join(__dirname, '..', 'dist');
 const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
 const distPath = fs.existsSync(rootDistPath) ? rootDistPath : clientDistPath;
-app.use(express.static(distPath));
-
-// Fallback for SPA routing (avoid path-to-regexp '*' issues)
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ error: 'API endpoint not found' });
-  }
-  const indexPath = path.join(distPath, 'index.html');
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      res.status(200).send('Shadowing App Backend is running. Please start the Vite client in development or run npm run build.');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
     }
+    const indexPath = path.join(distPath, 'index.html');
+    res.sendFile(indexPath, (err) => {
+      if (err) next();
+    });
   });
-});
+}
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`[Shadowing Server] Server listening on http://localhost:${PORT}`);
+    console.log(`[Shadowing Server] Backend listening on port ${PORT}`);
   });
 }
 

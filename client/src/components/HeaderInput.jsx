@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LANGUAGES } from '../constants';
-import { Search, Link as LinkIcon, Sparkles, Clipboard, Check, Globe } from 'lucide-react';
+import { Search, Link as LinkIcon, Sparkles, Clipboard, Check, Globe, Server } from 'lucide-react';
 
 export default function HeaderInput({
   selectedLang,
@@ -9,6 +9,7 @@ export default function HeaderInput({
   setInputUrl,
   onLoadVideo,
   isLoading,
+  onOpenBackendSettings,
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -59,13 +60,19 @@ export default function HeaderInput({
           </div>
         </div>
 
-        {/* Shadowing Language Selector */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mr-1">
-            <Globe className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Ngôn ngữ:</span>
-          </div>
-          <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
+          {/* Language Selector & Backend Server Config */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={onOpenBackendSettings}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-purple-500/50 text-slate-300 hover:text-white text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
+              title="Cấu hình kết nối Backend Render"
+            >
+              <Server className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Backend Render</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
             {LANGUAGES.map((lang) => {
               const isActive = selectedLang === lang.code;
               return (

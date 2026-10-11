@@ -7,8 +7,7 @@
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
     "client": "npm run dev --prefix client",
-    "postinstall": "npm install --prefix client",
-    "build": "npm run build --prefix client && node -e \"const fs=require('fs'); if (!fs.existsSync('dist') && fs.existsSync('client/dist')) fs.cpSync('client/dist', 'dist', {recursive:true});\"",
+    "build": "npm run build --prefix client",
     "start": "node server/index.js"
   },
   "keywords": [
