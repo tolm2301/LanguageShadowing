@@ -101,19 +101,36 @@ function App() {
     playerRef.current?.pause();
 
     try {
-      // 1. Fetch Video Info
+      // 1. Fetch Video Info (with browser oEmbed fallback)
       fetch(`/api/video-info?videoId=${vId}`)
-        .then((res) => {
-          if (!res.ok) return null;
-          return res.json();
-        })
+        .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.title) {
             setVideoInfo(data);
             saveVideoForLanguage(langCode || selectedLang, {
               title: data.title,
-              author_name: data.author_name,
+              author_name: data.author_name || data.author,
             });
+          } else {
+            // Direct client fallback to YouTube oEmbed
+            fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${vId}&format=json`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((oembed) => {
+                if (oembed && oembed.title) {
+                  const fallbackInfo = {
+                    videoId: vId,
+                    title: oembed.title,
+                    author: oembed.author_name || '',
+                    thumbnail: oembed.thumbnail_url || `https://i.ytimg.com/vi/${vId}/hqdefault.jpg`,
+                  };
+                  setVideoInfo(fallbackInfo);
+                  saveVideoForLanguage(langCode || selectedLang, {
+                    title: fallbackInfo.title,
+                    author_name: fallbackInfo.author,
+                  });
+                }
+              })
+              .catch(() => {});
           }
         })
         .catch(() => {});
@@ -123,10 +140,16 @@ function App() {
       
       const contentType = resp.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        throw new Error('Máy chủ API trả về định dạng không hợp lệ (mã: ' + resp.status + '). Vui lòng kiểm tra Serverless Function trên Vercel.');
+        throw new Error(
+          `Máy chủ API trả về mã HTTP ${resp.status} (không phải JSON). Vui lòng kiểm tra lại cấu hình Serverless Functions trên Vercel.`
+        );
       }
 
       const data = await resp.json();
+
+      if (!resp.ok && data?.error) {
+        throw new Error(data.error);
+      }
 
       if (data.transcript && data.transcript.length > 0) {
         setTranscript(data.transcript);

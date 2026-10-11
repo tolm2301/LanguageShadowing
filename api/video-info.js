@@ -1,4 +1,4 @@
-const { extractVideoId, getVideoInfo } = require('../server/transcript');
+const { extractVideoId, getVideoInfo } = require('./_lib/transcript');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,7 +10,14 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const rawInput = req.query?.url || req.query?.videoId;
+    let rawInput = req.query?.url || req.query?.videoId;
+    if (!rawInput && req.url) {
+      try {
+        const parsed = new URL(req.url, 'http://localhost');
+        rawInput = parsed.searchParams.get('url') || parsed.searchParams.get('videoId');
+      } catch (e) {}
+    }
+
     if (!rawInput) {
       return res.status(400).json({ error: 'url or videoId parameter is required' });
     }

@@ -74,3 +74,34 @@ npm run build
 npm start
 ```
 Mở trình duyệt tại: **`http://localhost:3001`**
+
+---
+
+## ⚡ Triển Khai Lên Vercel (100% Serverless Full-Stack)
+
+Dự án được tối ưu hóa hoàn hảo theo chuẩn **Vercel Serverless Architecture** (Frontend SPA + Backend Serverless Functions trên cùng 1 domain, không lo lỗi CORS, không cần server riêng):
+
+### Các bước thực hiện:
+1. **Push code lên GitHub**:
+   ```bash
+   git add .
+   git commit -m "feat: complete vercel serverless architecture"
+   git push origin master
+   ```
+
+2. **Tạo Project trên Vercel**:
+   - Truy cập [vercel.com](https://vercel.com) và đăng nhập.
+   - Bấm **"Add New..."** ➜ **"Project"** ➜ Chọn kho lưu trữ GitHub của bạn.
+
+3. **Cấu hình trên màn hình Vercel Import (Cực kỳ quan trọng)**:
+   - **Root Directory**: Để mặc định là `./` (**KHÔNG** chỉnh sửa hoặc chọn thư mục `client`).
+   - **Framework Preset**: Để `Other` hoặc `Vite`.
+   - **Build and Output Settings**: Giữ mặc định (hệ thống sẽ tự nhận theo file `vercel.json`):
+     - *Build Command*: `npm run build`
+     - *Output Directory*: `dist`
+   - **Environment Variables**: **Không cần điền gì cả** (hệ thống tự động sử dụng InnerTube & Google Translate GTX engine).
+
+4. **Bấm "Deploy"**:
+   - Vercel sẽ tự động cài đặt dependencies, build React client vào `dist`, và khởi tạo các Serverless Functions trong thư mục `api/`.
+   - Sau ~1 phút, trang web sẽ sẵn sàng hoạt động với domain `.vercel.app`. Mọi API `/api/transcript`, `/api/video-info`,... sẽ chạy mượt mà ngay lập tức!
+
