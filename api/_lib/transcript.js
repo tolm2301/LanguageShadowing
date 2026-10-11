@@ -824,11 +824,136 @@ function parseSrtOrVtt(text) {
   return items.map((item) => processSubtitleItem(item));
 }
 
+// Universal subtitle parser supporting SRT, VTT, YouTube copied transcripts, and timestamped lines
+function parseUniversalSubtitles(rawText) {
+  if (!rawText || !rawText.trim()) return [];
+  const text = rawText.trim();
+
+  // 1. Check if standard SRT or VTT (contains '-->')
+  if (text.includes('-->')) {
+    return parseSrtOrVtt(text);
+  }
+
+  // 2. Parse line by line
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const items = [];
+  let idx = 0;
+
+  function parseTimestamp(str) {
+    if (!str) return null;
+    const parts = str.trim().split(':').map(p => parseFloat(p));
+    if (parts.some(isNaN)) return null;
+    if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    return null;
+  }
+
+  const standaloneTimeRegex = /^(?:(\d{1,2}):)?(\d{1,2}):(\d{2})$/;
+  const inlineTimeRegex = /^\[?\(?((?:\d{1,2}:)?\d{1,2}:\d{2})\]?\)?\s+(.+)$/;
+
+  // Check if YouTube copied format: alternating standalone time and text
+  let timeCount = 0;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    if (standaloneTimeRegex.test(lines[i])) timeCount++;
+  }
+  const isAlternating = timeCount >= 2;
+
+  if (isAlternating) {
+    let currentStart = null;
+    let currentText = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (standaloneTimeRegex.test(line)) {
+        const timeSec = parseTimestamp(line);
+        if (currentStart !== null && currentText.length > 0) {
+          const endSec = timeSec > currentStart ? timeSec : currentStart + 3.0;
+          items.push({
+            id: `copied_${idx++}`,
+            start: parseFloat(currentStart.toFixed(2)),
+            end: parseFloat(endSec.toFixed(2)),
+            duration: parseFloat((endSec - currentStart).toFixed(2)),
+            text: currentText.join(' '),
+          });
+          currentText = [];
+        }
+        currentStart = timeSec;
+      } else {
+        if (currentStart !== null) {
+          currentText.push(line);
+        }
+      }
+    }
+
+    if (currentStart !== null && currentText.length > 0) {
+      items.push({
+        id: `copied_${idx++}`,
+        start: parseFloat(currentStart.toFixed(2)),
+        end: parseFloat((currentStart + 3.0).toFixed(2)),
+        duration: 3.0,
+        text: currentText.join(' '),
+      });
+    }
+
+    if (items.length > 0) {
+      for (let i = 0; i < items.length - 1; i++) {
+        const nextStart = items[i + 1].start;
+        if (nextStart > items[i].start && nextStart - items[i].start < 15) {
+          items[i].end = nextStart;
+          items[i].duration = parseFloat((nextStart - items[i].start).toFixed(2));
+        }
+      }
+      return items.map(item => processSubtitleItem(item));
+    }
+  }
+
+  // Check if inline timestamps: "0:05 text" or "[00:05] text"
+  let inlineEntries = [];
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(inlineTimeRegex);
+    if (match) {
+      const t = parseTimestamp(match[1]);
+      if (t !== null) {
+        inlineEntries.push({ time: t, text: match[2].trim() });
+      }
+    }
+  }
+
+  if (inlineEntries.length > 0) {
+    for (let i = 0; i < inlineEntries.length; i++) {
+      const start = inlineEntries[i].time;
+      let end = start + 3.0;
+      if (i < inlineEntries.length - 1) {
+        const nextTime = inlineEntries[i + 1].time;
+        if (nextTime > start) {
+          end = nextTime;
+        }
+      }
+      items.push({
+        id: `inline_${idx++}`,
+        start: parseFloat(start.toFixed(2)),
+        end: parseFloat(end.toFixed(2)),
+        duration: parseFloat((end - start).toFixed(2)),
+        text: inlineEntries[i].text,
+      });
+    }
+    return items.map(item => processSubtitleItem(item));
+  }
+
+  // Fallback to SRT/VTT
+  return parseSrtOrVtt(text);
+}
+
 module.exports = {
   extractVideoId,
   getVideoCaptionTracks,
   fetchTranscript,
   getVideoInfo,
   parseSrtOrVtt,
+  parseUniversalSubtitles,
   translateToVietnamese,
 };

@@ -566,22 +566,23 @@ function App() {
 
         {/* Subtitle Warning Banner if no auto-captions */}
         {errorMsg && (
-          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start justify-between gap-3 text-xs text-amber-300">
+          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-300">
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">{errorMsg}</p>
-                <p className="text-amber-400/80 mt-1">
-                  Mẹo: Bạn có thể nhập phụ đề thủ công (.srt/.vtt) hoặc bấm chọn một video mẫu bên trên để trải nghiệm ngay.
+                <p className="text-amber-400/80 mt-0.5">
+                  Mẹo: Bạn có thể copy lời thoại trực tiếp từ YouTube (bấm ... ➔ Hiện bản ghi lời thoại) hoặc tải file .srt/.vtt để học ngay!
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsCustomSubModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition shrink-0 cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
             >
-              + Nhập SRT/VTT
+              <FileText className="w-3.5 h-3.5" />
+              <span>+ Dán lời thoại / SRT</span>
             </button>
           </div>
         )}

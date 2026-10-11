@@ -1,4 +1,4 @@
-const { parseSrtOrVtt, translateToVietnamese } = require('./_lib/transcript');
+const { parseUniversalSubtitles, translateToVietnamese } = require('./_lib/transcript');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,25 +11,35 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const { text } = body;
-    if (!text) {
-      return res.status(400).json({ error: 'Text content is required' });
+    const text = body.text || body.srtContent || body.content || '';
+    if (!text.trim()) {
+      return res.status(400).json({ error: 'Nội dung phụ đề không được để trống' });
     }
-    let transcript = parseSrtOrVtt(text);
-    if (transcript.length > 0) {
-      try {
-        const rawTexts = transcript.map(t => t.text);
-        const viTranslations = await translateToVietnamese(rawTexts);
-        transcript = transcript.map((item, idx) => ({
-          ...item,
-          textVi: viTranslations[idx] || item.text,
-        }));
-      } catch (err) {
-        console.warn('Translate custom sub error:', err.message);
-      }
+
+    let transcript = parseUniversalSubtitles(text);
+    if (!transcript || transcript.length === 0) {
+      return res.status(400).json({
+        error: 'Không thể nhận diện định dạng phụ đề. Vui lòng kiểm tra lại file SRT/VTT hoặc nội dung sao chép từ YouTube.',
+      });
     }
-    res.status(200).json({ transcript, count: transcript.length });
+
+    try {
+      const rawTexts = transcript.map(t => t.text);
+      const viTranslations = await translateToVietnamese(rawTexts);
+      transcript = transcript.map((item, idx) => ({
+        ...item,
+        textVi: viTranslations[idx] || item.text,
+      }));
+    } catch (err) {
+      console.warn('Translate custom sub error:', err.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      transcript,
+      count: transcript.length,
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 };
