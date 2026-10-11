@@ -40,13 +40,28 @@ export default function SubtitleSection({
   onOpenTranscriptDrawer,
   onOpenCustomSubModal,
   selectedLang = 'en',
+  isBlindMode: propBlindMode,
+  onToggleBlindMode,
+  showPinyin: propShowPinyin,
+  onToggleShowPinyin,
+  activeTab: propActiveTab,
+  onChangeActiveTab,
 }) {
-  const [isBlindMode, setIsBlindMode] = useState(false);
+  const [internalBlindMode, setInternalBlindMode] = useState(false);
+  const isBlindMode = propBlindMode !== undefined ? propBlindMode : internalBlindMode;
+  const toggleBlindMode = onToggleBlindMode || (() => setInternalBlindMode(!internalBlindMode));
+
+  const [internalActiveTab, setInternalActiveTab] = useState('bilingual');
+  const activeTab = propActiveTab !== undefined ? propActiveTab : internalActiveTab;
+  const changeActiveTab = onChangeActiveTab || setInternalActiveTab;
+
+  const [internalShowPinyin, setInternalShowPinyin] = useState(true);
+  const showPinyin = propShowPinyin !== undefined ? propShowPinyin : internalShowPinyin;
+  const toggleShowPinyin = onToggleShowPinyin || (() => setInternalShowPinyin(!internalShowPinyin));
+
   const [isRevealed, setIsRevealed] = useState(false);
-  const [activeTab, setActiveTab] = useState('bilingual'); // 'bilingual' | 'original' | 'vietnamese'
   const [copiedOriginal, setCopiedOriginal] = useState(false);
   const [copiedVi, setCopiedVi] = useState(false);
-  const [showPinyin, setShowPinyin] = useState(true);
 
   const hasPinyinInTranscript =
     selectedLang === 'zh' || transcript.some((t) => !!t.pinyin);
@@ -116,7 +131,7 @@ export default function SubtitleSection({
         <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
           <button
             type="button"
-            onClick={() => setActiveTab('bilingual')}
+            onClick={() => changeActiveTab('bilingual')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'bilingual'
                 ? 'bg-indigo-600 text-white shadow-sm'
@@ -129,7 +144,7 @@ export default function SubtitleSection({
 
           <button
             type="button"
-            onClick={() => setActiveTab('original')}
+            onClick={() => changeActiveTab('original')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'original'
                 ? 'bg-indigo-600 text-white shadow-sm'
@@ -141,7 +156,7 @@ export default function SubtitleSection({
 
           <button
             type="button"
-            onClick={() => setActiveTab('vietnamese')}
+            onClick={() => changeActiveTab('vietnamese')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'vietnamese'
                 ? 'bg-amber-600 text-white shadow-sm'
@@ -158,7 +173,7 @@ export default function SubtitleSection({
           <button
             type="button"
             onClick={() => {
-              setIsBlindMode(!isBlindMode);
+              toggleBlindMode();
               setIsRevealed(false);
             }}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
@@ -407,7 +422,7 @@ export default function SubtitleSection({
                 {hasPinyinInTranscript && (
                   <button
                     type="button"
-                    onClick={() => setShowPinyin(!showPinyin)}
+                    onClick={toggleShowPinyin}
                     className={`text-[10px] md:text-xs font-semibold px-2 py-0.5 rounded-md transition cursor-pointer border ${
                       showPinyin
                         ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30'

@@ -8,6 +8,14 @@ import CustomSubModal from './components/CustomSubModal';
 import ShortcutsModal from './components/ShortcutsModal';
 import { LANGUAGES, formatTime, PLAYBACK_SPEEDS } from './constants';
 import {
+  getSavedCurrentLang,
+  saveCurrentLang,
+  getSavedLanguageVideos,
+  saveVideoForLanguage,
+  getSavedConfig,
+  saveConfig,
+} from './utils/storage';
+import {
   Keyboard,
   FileText,
   AlertCircle,
@@ -18,13 +26,26 @@ import {
 } from 'lucide-react';
 
 function App() {
-  // Current selection state
-  const [selectedLang, setSelectedLang] = useState('en');
-  const [inputUrl, setInputUrl] = useState('https://www.youtube.com/watch?v=UF8uR6Z6KLc');
-  const [videoId, setVideoId] = useState('UF8uR6Z6KLc');
-  const [videoInfo, setVideoInfo] = useState({
+  // Read saved state or defaults from localStorage
+  const savedConfig = getSavedConfig();
+  const savedLang = getSavedCurrentLang();
+  const savedLangVideos = getSavedLanguageVideos();
+  const currentLangVideo = savedLangVideos[savedLang] || {
+    url: 'https://www.youtube.com/watch?v=UF8uR6Z6KLc',
+    videoId: 'UF8uR6Z6KLc',
     title: 'Steve Jobs - Stanford Speech (Full HD)',
-    author_name: 'Stanford University'
+    author_name: 'Stanford University',
+    rangeStart: 0,
+    rangeEnd: 60,
+  };
+
+  // Current selection state
+  const [selectedLang, setSelectedLang] = useState(savedLang);
+  const [inputUrl, setInputUrl] = useState(currentLangVideo.url);
+  const [videoId, setVideoId] = useState(currentLangVideo.videoId);
+  const [videoInfo, setVideoInfo] = useState({
+    title: currentLangVideo.title || '',
+    author_name: currentLangVideo.author_name || ''
   });
 
   // Transcript state
@@ -33,20 +54,25 @@ function App() {
   const [errorMsg, setErrorMsg] = useState('');
 
   // Duration & Range state
-  const [selectedDuration, setSelectedDuration] = useState(60); // 60 seconds (1 min) by default
-  const [rangeStart, setRangeStart] = useState(0);
-  const [rangeEnd, setRangeEnd] = useState(60);
-  const [loopRange, setLoopRange] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState(60);
+  const [rangeStart, setRangeStart] = useState(currentLangVideo.rangeStart || 0);
+  const [rangeEnd, setRangeEnd] = useState(currentLangVideo.rangeEnd || 60);
+  const [loopRange, setLoopRange] = useState(!!savedConfig.loopRange);
 
   // Playback & Shadowing state
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(savedConfig.playbackSpeed || 1.0);
   const [loopSentence, setLoopSentence] = useState(false);
   const [lockedSentence, setLockedSentence] = useState(null);
-  const [autoPauseMode, setAutoPauseMode] = useState(false);
+  const [autoPauseMode, setAutoPauseMode] = useState(!!savedConfig.autoPauseMode);
   const [isAutoPaused, setIsAutoPaused] = useState(false);
   const [playerState, setPlayerState] = useState(-1);
+
+  // Ergonomic preferences from localStorage
+  const [isBlindMode, setIsBlindMode] = useState(!!savedConfig.isBlindMode);
+  const [showPinyin, setShowPinyin] = useState(savedConfig.showPinyin !== false);
+  const [activeTab, setActiveTab] = useState(savedConfig.activeTab || 'bilingual');
 
   // Modals state
   const [isTranscriptDrawerOpen, setIsTranscriptDrawerOpen] = useState(false);
@@ -77,16 +103,29 @@ function App() {
     try {
       // 1. Fetch Video Info
       fetch(`/api/video-info?videoId=${vId}`)
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) return null;
+          return res.json();
+        })
         .then((data) => {
           if (data && data.title) {
             setVideoInfo(data);
+            saveVideoForLanguage(langCode || selectedLang, {
+              title: data.title,
+              author_name: data.author_name,
+            });
           }
         })
         .catch(() => {});
 
       // 2. Fetch Transcript
       const resp = await fetch(`/api/transcript?videoId=${vId}&lang=${langCode || selectedLang}`);
+      
+      const contentType = resp.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Máy chủ API trả về định dạng không hợp lệ (mã: ' + resp.status + '). Vui lòng kiểm tra Serverless Function trên Vercel.');
+      }
+
       const data = await resp.json();
 
       if (data.transcript && data.transcript.length > 0) {
@@ -105,7 +144,7 @@ function App() {
       }
     } catch (err) {
       console.error('Error fetching transcript:', err);
-      setErrorMsg('Không thể kết nối đến máy chủ lấy phụ đề.');
+      setErrorMsg(err.message || 'Không thể kết nối đến máy chủ lấy phụ đề.');
       setTranscript([]);
     } finally {
       setIsLoading(false);
@@ -124,44 +163,93 @@ function App() {
       setErrorMsg('Đường dẫn YouTube không hợp lệ!');
       return;
     }
-    setVideoId(id);
     const targetLang = langOverride || selectedLang;
+    setVideoId(id);
+    saveVideoForLanguage(targetLang, {
+      url,
+      videoId: id,
+    });
     loadVideoData(id, targetLang);
   };
 
-  // Handle Language switch
+  // Handle Language switch - restore saved video for that language
   const handleSelectLang = (langCode) => {
     setSelectedLang(langCode);
-    const langObj = LANGUAGES.find((l) => l.code === langCode);
-    if (langObj) {
-      const sampleIds = LANGUAGES.map((l) => l.sampleVideoId);
-      if (!inputUrl || sampleIds.includes(videoId)) {
-        const newUrl = `https://www.youtube.com/watch?v=${langObj.sampleVideoId}`;
-        setInputUrl(newUrl);
-        setVideoId(langObj.sampleVideoId);
-        loadVideoData(langObj.sampleVideoId, langCode);
-        return;
-      }
+    saveCurrentLang(langCode);
+
+    const savedVideos = getSavedLanguageVideos();
+    const langVideo = savedVideos[langCode];
+
+    if (langVideo) {
+      setInputUrl(langVideo.url);
+      setVideoId(langVideo.videoId);
+      setVideoInfo({
+        title: langVideo.title || '',
+        author_name: langVideo.author_name || '',
+      });
+      setRangeStart(langVideo.rangeStart || 0);
+      setRangeEnd(langVideo.rangeEnd || 60);
+      loadVideoData(langVideo.videoId, langCode);
+    } else {
+      loadVideoData(videoId, langCode);
     }
-    loadVideoData(videoId, langCode);
   };
 
   // Handle Duration preset change (30s, 1m, 2m, All)
   const handleSelectDuration = (seconds) => {
     setSelectedDuration(seconds);
+    let s = 0;
+    let e = 60;
     if (seconds === 0) {
-      setRangeStart(0);
-      setRangeEnd(videoDuration || 3600);
+      s = 0;
+      e = videoDuration || 3600;
     } else {
-      const start = Math.floor(currentTime);
-      setRangeStart(start);
-      setRangeEnd(start + seconds);
+      s = Math.floor(currentTime);
+      e = s + seconds;
     }
+    setRangeStart(s);
+    setRangeEnd(e);
+    saveVideoForLanguage(selectedLang, { rangeStart: s, rangeEnd: e });
   };
 
   const handleChangeRange = (start, end) => {
     setRangeStart(start);
     setRangeEnd(end);
+    saveVideoForLanguage(selectedLang, { rangeStart: start, rangeEnd: end });
+  };
+
+  const handleChangeSpeed = (speed) => {
+    setPlaybackSpeed(speed);
+    saveConfig({ playbackSpeed: speed });
+  };
+
+  const handleToggleAutoPause = () => {
+    const next = !autoPauseMode;
+    setAutoPauseMode(next);
+    saveConfig({ autoPauseMode: next });
+  };
+
+  const handleToggleLoopRange = () => {
+    const next = !loopRange;
+    setLoopRange(next);
+    saveConfig({ loopRange: next });
+  };
+
+  const handleToggleBlindMode = () => {
+    const next = !isBlindMode;
+    setIsBlindMode(next);
+    saveConfig({ isBlindMode: next });
+  };
+
+  const handleToggleShowPinyin = () => {
+    const next = !showPinyin;
+    setShowPinyin(next);
+    saveConfig({ showPinyin: next });
+  };
+
+  const handleChangeActiveTab = (tab) => {
+    setActiveTab(tab);
+    saveConfig({ activeTab: tab });
   };
 
   // Calculate Active Subtitle
@@ -449,7 +537,7 @@ function App() {
           rangeEnd={rangeEnd}
           onChangeRange={handleChangeRange}
           loopRange={loopRange}
-          onToggleLoopRange={() => setLoopRange(!loopRange)}
+          onToggleLoopRange={handleToggleLoopRange}
           onSeek={handleSeek}
         />
 
@@ -482,7 +570,7 @@ function App() {
           activeSubtitleIndex={activeSubtitleIndex}
           currentTime={currentTime}
           playbackSpeed={playbackSpeed}
-          onChangeSpeed={setPlaybackSpeed}
+          onChangeSpeed={handleChangeSpeed}
           onSeek={handleSeek}
           onPrevSentence={handlePrevSentence}
           onNextSentence={handleNextSentence}
@@ -490,12 +578,18 @@ function App() {
           loopSentence={loopSentence}
           onToggleLoopSentence={handleToggleLoopSentence}
           autoPauseMode={autoPauseMode}
-          onToggleAutoPause={() => setAutoPauseMode(!autoPauseMode)}
+          onToggleAutoPause={handleToggleAutoPause}
           isAutoPaused={isAutoPaused}
           onResumeAfterAutoPause={handleResumeAfterAutoPause}
           onOpenTranscriptDrawer={() => setIsTranscriptDrawerOpen(true)}
           onOpenCustomSubModal={() => setIsCustomSubModalOpen(true)}
           selectedLang={selectedLang}
+          isBlindMode={isBlindMode}
+          onToggleBlindMode={handleToggleBlindMode}
+          showPinyin={showPinyin}
+          onToggleShowPinyin={handleToggleShowPinyin}
+          activeTab={activeTab}
+          onChangeActiveTab={handleChangeActiveTab}
         />
 
         {/* Ergonomic Quick Footer Toolbar */}

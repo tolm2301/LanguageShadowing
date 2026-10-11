@@ -181,6 +181,10 @@ app.use((req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`[Shadowing Server] Server listening on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`[Shadowing Server] Server listening on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
