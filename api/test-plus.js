@@ -1,24 +1,28 @@
-const { fetchTranscript, listLanguages } = require('youtube-transcript-plus');
+const { YouTubeTranscriptApi, AutoPoTokenProvider } = require('youtube-transcript-nodejs');
 
 module.exports = async function handler(req, res) {
   const videoId = req.query.videoId || 'muCY-KBCJUQ';
   try {
-    const langs = await listLanguages(videoId);
-    let items = [];
-    try {
-      items = await fetchTranscript(videoId, { lang: 'en' });
-    } catch (e2) {
-      items = { error: e2.message, stack: e2.stack };
-    }
+    const poProvider = new AutoPoTokenProvider();
+    const api = new YouTubeTranscriptApi({ poTokenProvider: poProvider });
+    const transList = await api.list(videoId);
+    const tracks = [...transList].map(t => ({
+      languageCode: t.languageCode,
+      language: t.language,
+      isGenerated: t.isGenerated
+    }));
+    const trans = await api.fetch(videoId, { languages: ['en'] });
     return res.status(200).json({
       success: true,
-      langs,
-      itemCount: Array.isArray(items) ? items.length : null,
-      itemsSample: Array.isArray(items) ? items.slice(0, 2) : items,
+      videoId,
+      tracks,
+      snippetCount: trans.snippets?.length || 0,
+      firstSnippet: trans.snippets?.[0] || null,
     });
   } catch (err) {
     return res.status(200).json({
       success: false,
+      videoId,
       error: err.message,
       stack: err.stack,
     });
