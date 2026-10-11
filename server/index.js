@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-yt-cookie', 'x-youtube-cookie']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -104,6 +104,12 @@ app.get('/api/transcript', async (req, res) => {
   try {
     const rawInput = req.query.url || req.query.videoId;
     const targetLang = req.query.lang || 'en';
+    const userCookie =
+      req.headers['x-yt-cookie'] ||
+      req.headers['x-youtube-cookie'] ||
+      req.query.cookie ||
+      process.env.YOUTUBE_COOKIE ||
+      null;
 
     if (!rawInput) {
       return res.status(400).json({ error: 'url or videoId parameter is required' });
@@ -116,7 +122,7 @@ app.get('/api/transcript', async (req, res) => {
 
     const [videoInfo, transcriptData] = await Promise.all([
       getVideoInfo(videoId),
-      fetchTranscript(videoId, targetLang),
+      fetchTranscript(videoId, targetLang, userCookie),
     ]);
 
     res.json({
@@ -136,14 +142,49 @@ app.get('/api/transcript', async (req, res) => {
 app.get('/api/caption-tracks', async (req, res) => {
   try {
     const rawInput = req.query.url || req.query.videoId;
+    const userCookie =
+      req.headers['x-yt-cookie'] ||
+      req.headers['x-youtube-cookie'] ||
+      req.query.cookie ||
+      process.env.YOUTUBE_COOKIE ||
+      null;
+
     const videoId = extractVideoId(rawInput);
     if (!videoId) {
       return res.status(400).json({ error: 'Invalid YouTube URL or Video ID' });
     }
-    const tracks = await getVideoCaptionTracks(videoId);
+    const tracks = await getVideoCaptionTracks(videoId, userCookie);
     res.json({ videoId, tracks });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Verify YouTube cookie functionality
+app.post('/api/verify-cookie', async (req, res) => {
+  try {
+    const cookie = req.body?.cookie || req.headers['x-yt-cookie'] || process.env.YOUTUBE_COOKIE;
+    if (!cookie) {
+      return res.status(400).json({ success: false, error: 'Chưa có cookie để kiểm tra' });
+    }
+    // Test with sample video
+    const testVideoId = 'muCY-KBCJUQ';
+    const result = await fetchTranscript(testVideoId, 'en', cookie);
+    if (result && result.transcript && result.transcript.length > 0) {
+      return res.json({
+        success: true,
+        message: 'Cookie hoạt động hoàn hảo! Đã lấy thành công phụ đề từ YouTube.',
+        count: result.transcript.length,
+        language: result.selectedTrack?.languageCode || 'en'
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: result.error || 'Cookie không hợp lệ hoặc đã hết hạn.'
+      });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Lỗi khi kiểm tra cookie' });
   }
 });
 

@@ -25,6 +25,88 @@ try {
   ytNodeApi = new YouTubeTranscriptApi({ poTokenProvider: new AutoPoTokenProvider() });
 } catch (e) {}
 
+function parseCookieInput(cookieInput) {
+  if (!cookieInput) return { cookieString: '', cookieArray: [] };
+
+  if (Array.isArray(cookieInput)) {
+    const valid = cookieInput.filter(c => c && c.name && c.value);
+    const cookieString = valid.map(c => `${c.name}=${c.value}`).join('; ');
+    const cookieArray = valid.map(c => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain || '.youtube.com',
+      path: c.path || '/'
+    }));
+    return { cookieString, cookieArray };
+  }
+
+  if (typeof cookieInput === 'string') {
+    const trimmed = cookieInput.trim();
+    if (!trimmed) return { cookieString: '', cookieArray: [] };
+
+    // Check if JSON string
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parseCookieInput(parsed);
+        }
+      } catch (e) {}
+    }
+
+    // Check Netscape format (tab-separated lines)
+    if (trimmed.includes('\t')) {
+      const lines = trimmed.split('\n');
+      const cookieArray = [];
+      const parts = [];
+      for (const line of lines) {
+        const clean = line.trim();
+        if (!clean || clean.startsWith('#')) continue;
+        const tokens = clean.split('\t');
+        if (tokens.length >= 7) {
+          const name = tokens[5].trim();
+          const value = tokens[6].trim();
+          cookieArray.push({ name, value, domain: tokens[0].trim(), path: tokens[2].trim() });
+          parts.push(`${name}=${value}`);
+        }
+      }
+      if (cookieArray.length > 0) {
+        return { cookieString: parts.join('; '), cookieArray };
+      }
+    }
+
+    // Standard header string: "key1=val1; key2=val2"
+    const pairs = trimmed.split(';').map(p => p.trim()).filter(Boolean);
+    const cookieArray = [];
+    const parts = [];
+    for (const pair of pairs) {
+      const idx = pair.indexOf('=');
+      if (idx > 0) {
+        const name = pair.slice(0, idx).trim();
+        const value = pair.slice(idx + 1).trim();
+        cookieArray.push({ name, value, domain: '.youtube.com', path: '/' });
+        parts.push(`${name}=${value}`);
+      }
+    }
+    return { cookieString: parts.join('; '), cookieArray };
+  }
+
+  return { cookieString: '', cookieArray: [] };
+}
+
+function getYtNodeApi(cookieInput = null) {
+  const { cookieArray } = parseCookieInput(cookieInput || process.env.YOUTUBE_COOKIE);
+  try {
+    const { YouTubeTranscriptApi, AutoPoTokenProvider } = require('youtube-transcript-nodejs');
+    return new YouTubeTranscriptApi({
+      cookies: cookieArray.length > 0 ? cookieArray : undefined,
+      poTokenProvider: new AutoPoTokenProvider()
+    });
+  } catch (e) {
+    return ytNodeApi;
+  }
+}
+
 let sampleCache = null;
 try {
   sampleCache = require('./sampleCache.json');
@@ -116,13 +198,17 @@ function parseTranscriptXml(xml) {
   return items;
 }
 
-async function getCaptionTracksAndroidVr(videoId) {
+async function getCaptionTracksAndroidVr(videoId, cookieString = '') {
   try {
+    const pageHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    };
+    if (cookieString) {
+      pageHeaders['Cookie'] = cookieString;
+    }
     const pageResp = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
+      headers: pageHeaders,
     });
     if (!pageResp.ok) return [];
     const html = await pageResp.text();
@@ -170,6 +256,7 @@ async function getCaptionTracksAndroidVr(videoId) {
       'User-Agent': 'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
     };
     if (visitorData) headers['X-Goog-Visitor-Id'] = visitorData;
+    if (cookieString) headers['Cookie'] = cookieString;
 
     const resp = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
       method: 'POST',
@@ -195,10 +282,12 @@ async function getCaptionTracksAndroidVr(videoId) {
   return [];
 }
 
-async function getVideoCaptionTracks(videoId) {
+async function getVideoCaptionTracks(videoId, cookieInput = null) {
+  const { cookieString } = parseCookieInput(cookieInput || process.env.YOUTUBE_COOKIE);
+
   // Method 1 (Direct Android VR client - bypasses cloud datacenter bot protection):
   try {
-    const vrTracks = await getCaptionTracksAndroidVr(videoId);
+    const vrTracks = await getCaptionTracksAndroidVr(videoId, cookieString);
     if (Array.isArray(vrTracks) && vrTracks.length > 0) {
       return vrTracks;
     }
@@ -206,10 +295,11 @@ async function getVideoCaptionTracks(videoId) {
     console.warn('Android VR caption tracks extraction warning:', err.message);
   }
 
-  // Method 2: Use youtube-transcript-nodejs with AutoPoTokenProvider
-  if (ytNodeApi) {
+  // Method 2: Use youtube-transcript-nodejs with Cookie & AutoPoTokenProvider
+  const nodeApi = getYtNodeApi(cookieInput);
+  if (nodeApi) {
     try {
-      const list = await ytNodeApi.list(videoId);
+      const list = await nodeApi.list(videoId);
       const all = [...(list.manuallyCreatedTranscripts || []), ...(list.generatedTranscripts || [])];
       if (all.length > 0) {
         return all.map(t => ({
@@ -224,7 +314,7 @@ async function getVideoCaptionTracks(videoId) {
     }
   }
 
-  // Method 2: Use youtube-transcript-plus listLanguages
+  // Method 3: Use youtube-transcript-plus listLanguages
   if (ytPlus && ytPlus.listLanguages) {
     try {
       const langs = await ytPlus.listLanguages(videoId);
@@ -240,14 +330,17 @@ async function getVideoCaptionTracks(videoId) {
     }
   }
 
-  // Method 2: InnerTube API
+  // Method 4: InnerTube API
   try {
+    const itHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent': INNERTUBE_USER_AGENT,
+    };
+    if (cookieString) itHeaders['Cookie'] = cookieString;
+
     const resp = await fetch(INNERTUBE_API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': INNERTUBE_USER_AGENT,
-      },
+      headers: itHeaders,
       body: JSON.stringify({
         context: INNERTUBE_CONTEXT,
         videoId: videoId,
@@ -270,13 +363,16 @@ async function getVideoCaptionTracks(videoId) {
     console.warn('InnerTube error:', err.message);
   }
 
-  // Method 3: Fallback parse web page HTML
+  // Method 5: Fallback parse web page HTML
   try {
+    const pageHeaders = {
+      'User-Agent': USER_AGENT,
+      'Accept-Language': 'en-US,en;q=0.9',
+    };
+    if (cookieString) pageHeaders['Cookie'] = cookieString;
+
     const pageResp = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
+      headers: pageHeaders,
     });
     const html = await pageResp.text();
     const token = 'var ytInitialPlayerResponse = ';
@@ -492,9 +588,11 @@ function cleanVietnameseTranslation(viText, pinyin) {
   return cleaned || viText;
 }
 
-async function fetchTranscript(videoId, targetLang = null) {
-  // Check instant sample cache first
-  if (sampleCache && sampleCache[videoId]) {
+async function fetchTranscript(videoId, targetLang = null, cookieInput = null) {
+  const { cookieString } = parseCookieInput(cookieInput || process.env.YOUTUBE_COOKIE);
+
+  // Check instant sample cache first (only when no custom cookie is forcing a fresh fetch)
+  if (!cookieString && sampleCache && sampleCache[videoId]) {
     const cached = sampleCache[videoId];
     const trackCode = cached.selectedTrack?.languageCode?.toLowerCase() || '';
     const reqCode = (targetLang || 'en').toLowerCase().slice(0, 2);
@@ -509,7 +607,7 @@ async function fetchTranscript(videoId, targetLang = null) {
     }
   }
 
-  const tracks = await getVideoCaptionTracks(videoId);
+  const tracks = await getVideoCaptionTracks(videoId, cookieInput);
   let selectedTrack = null;
   let transcript = [];
 
@@ -522,11 +620,16 @@ async function fetchTranscript(videoId, targetLang = null) {
     for (const track of candidateTracks) {
       if (!track.baseUrl) continue;
       try {
+        const fetchHeaders = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': track.languageCode,
+        };
+        if (cookieString) {
+          fetchHeaders['Cookie'] = cookieString;
+        }
+
         const resp = await fetch(track.baseUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': track.languageCode,
-          },
+          headers: fetchHeaders,
         });
 
         if (resp.ok) {
@@ -545,10 +648,11 @@ async function fetchTranscript(videoId, targetLang = null) {
     }
   }
 
-  // Method 2: youtube-transcript-nodejs with AutoPoTokenProvider
-  if (transcript.length === 0 && ytNodeApi) {
+  // Method 2: youtube-transcript-nodejs with Cookie & AutoPoTokenProvider
+  const nodeApi = getYtNodeApi(cookieInput);
+  if (transcript.length === 0 && nodeApi) {
     try {
-      const list = await ytNodeApi.list(videoId);
+      const list = await nodeApi.list(videoId);
       const all = [...(list.manuallyCreatedTranscripts || []), ...(list.generatedTranscripts || [])];
       if (all.length > 0) {
         const targetLower = (targetLang || 'en').toLowerCase();
@@ -956,4 +1060,6 @@ module.exports = {
   parseSrtOrVtt,
   parseUniversalSubtitles,
   translateToVietnamese,
+  parseCookieInput,
+  getYtNodeApi,
 };

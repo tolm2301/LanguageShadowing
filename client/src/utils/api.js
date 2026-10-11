@@ -1,3 +1,5 @@
+import { getSavedYtCookie } from './storage';
+
 export const BACKEND_URL_STORAGE_KEY = 'shadowing_backend_url';
 
 // Get active backend URL
@@ -34,6 +36,16 @@ export function getApiEndpoint(path) {
   return base ? `${base}${cleanPath}` : cleanPath;
 }
 
+// Get standard API headers with optional YouTube cookie
+export function getApiHeaders(customHeaders = {}) {
+  const headers = { ...customHeaders };
+  const cookie = getSavedYtCookie();
+  if (cookie) {
+    headers['x-yt-cookie'] = cookie;
+  }
+  return headers;
+}
+
 // Test connectivity to a backend URL
 export async function testBackendConnection(url) {
   const target = (url || getBackendUrl() || '').trim().replace(/\/+$/, '');
@@ -50,5 +62,25 @@ export async function testBackendConnection(url) {
     return { success: false, error: `HTTP ${res.status} ${res.statusText}` };
   } catch (err) {
     return { success: false, error: err.message || 'Không thể kết nối đến máy chủ' };
+  }
+}
+
+// Verify YouTube cookie functionality against backend
+export async function verifyYtCookie(cookie, backendUrl) {
+  const target = (backendUrl || getBackendUrl() || '').trim().replace(/\/+$/, '');
+  const endpoint = target ? `${target}/api/verify-cookie` : '/api/verify-cookie';
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ cookie }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    return { success: false, error: err.message || 'Lỗi kết nối tới máy chủ khi kiểm tra cookie' };
   }
 }

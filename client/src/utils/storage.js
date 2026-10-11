@@ -4,6 +4,7 @@ export const STORAGE_KEYS = {
   CURRENT_LANG: 'shadowing_current_lang',
   LANG_VIDEOS: 'shadowing_lang_videos',
   CONFIG: 'shadowing_learning_config',
+  YT_COOKIE: 'shadowing_yt_cookie',
 };
 
 // Default initial videos mapping for all 5 languages
@@ -109,12 +110,33 @@ export function saveConfig(updates) {
   }
 }
 
+// Read YouTube cookie
+export function getSavedYtCookie() {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.YT_COOKIE) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+// Save YouTube cookie
+export function saveYtCookie(cookieStr) {
+  try {
+    if (!cookieStr || !cookieStr.trim()) {
+      localStorage.removeItem(STORAGE_KEYS.YT_COOKIE);
+    } else {
+      localStorage.setItem(STORAGE_KEYS.YT_COOKIE, cookieStr.trim());
+    }
+  } catch (e) {}
+}
+
 // Clear all and reset
 export function clearAllSavedData() {
   try {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_LANG);
     localStorage.removeItem(STORAGE_KEYS.LANG_VIDEOS);
     localStorage.removeItem(STORAGE_KEYS.CONFIG);
+    localStorage.removeItem(STORAGE_KEYS.YT_COOKIE);
   } catch (e) {
     console.warn('Cannot clear localStorage', e);
   }

@@ -6,8 +6,9 @@ import SubtitleSection from './components/SubtitleSection';
 import TranscriptDrawer from './components/TranscriptDrawer';
 import ShortcutsModal from './components/ShortcutsModal';
 import BackendSettingsModal from './components/BackendSettingsModal';
+import CookieSettingsModal from './components/CookieSettingsModal';
 import { LANGUAGES, formatTime, PLAYBACK_SPEEDS } from './constants';
-import { getApiEndpoint, getBackendUrl } from './utils/api';
+import { getApiEndpoint, getBackendUrl, getApiHeaders } from './utils/api';
 import {
   getSavedCurrentLang,
   saveCurrentLang,
@@ -15,6 +16,7 @@ import {
   saveVideoForLanguage,
   getSavedConfig,
   saveConfig,
+  getSavedYtCookie,
 } from './utils/storage';
 import {
   Keyboard,
@@ -24,7 +26,8 @@ import {
   Volume2,
   ExternalLink,
   Info,
-  Server
+  Server,
+  Cookie,
 } from 'lucide-react';
 
 function App() {
@@ -80,6 +83,8 @@ function App() {
   const [isTranscriptDrawerOpen, setIsTranscriptDrawerOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [isBackendModalOpen, setIsBackendModalOpen] = useState(false);
+  const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
+  const [hasCookie, setHasCookie] = useState(!!getSavedYtCookie());
 
   const playerRef = useRef(null);
 
@@ -138,7 +143,9 @@ function App() {
         .catch(() => {});
 
       // 2. Fetch Transcript
-      const resp = await fetch(getApiEndpoint(`/api/transcript?videoId=${vId}&lang=${langCode || selectedLang}`));
+      const resp = await fetch(getApiEndpoint(`/api/transcript?videoId=${vId}&lang=${langCode || selectedLang}`), {
+        headers: getApiHeaders(),
+      });
       
       const contentType = resp.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
@@ -170,10 +177,18 @@ function App() {
     } catch (err) {
       console.error('Error fetching transcript:', err);
       const backend = getBackendUrl();
-      const hint = backend
-        ? `Không thể kết nối đến Backend Render (${backend}). Máy chủ miễn phí có thể đang khởi động lại (mất ~30s).`
-        : `Chưa kết nối Backend Render hoặc máy chủ chưa sẵn sàng. Bạn có thể bấm "Backend Render" ở góc trên để cài đặt link.`;
-      setErrorMsg(err.message || hint);
+      const rawError = err.message || '';
+      let displayError = rawError;
+
+      if (/IP-blocked|BotGuard|bot|Sign in|PoToken/i.test(rawError)) {
+        displayError = 'YouTube chặn máy chủ đám mây lấy phụ đề video này (BotGuard). Vui lòng bấm "Thêm Cookie YouTube" bên dưới để vượt chặn tự động.';
+      } else if (!rawError) {
+        displayError = backend
+          ? `Không thể kết nối đến Backend Render (${backend}). Máy chủ miễn phí có thể đang khởi động lại (mất ~30s).`
+          : `Chưa kết nối Backend Render hoặc máy chủ chưa sẵn sàng. Bạn có thể bấm "Backend Render" ở góc trên để cài đặt link.`;
+      }
+
+      setErrorMsg(displayError);
       setTranscript([]);
     } finally {
       setIsLoading(false);
@@ -517,6 +532,8 @@ function App() {
           onLoadVideo={handleLoadVideo}
           isLoading={isLoading}
           onOpenBackendSettings={() => setIsBackendModalOpen(true)}
+          onOpenCookieSettings={() => setIsCookieModalOpen(true)}
+          hasCookie={hasCookie}
         />
 
         {/* Video Info Title Banner */}
@@ -567,23 +584,33 @@ function App() {
 
         {/* Subtitle Warning Banner if no auto-captions */}
         {errorMsg && (
-          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start justify-between gap-3 text-xs text-amber-300">
+          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-300">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">{errorMsg}</p>
                 <p className="text-amber-400/80 mt-0.5">
-                  Vui lòng thử chọn một trong các bài học mẫu 5 thứ tiếng ở trên, hoặc kiểm tra kết nối Backend Render.
+                  Bạn có thể chọn bài học mẫu ở trên, hoặc thêm YouTube Cookie để mở khóa 100% video.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsBackendModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold whitespace-nowrap transition cursor-pointer shrink-0"
-            >
-              Cấu hình Backend
-            </button>
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsCookieModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Cookie className="w-3.5 h-3.5 text-amber-400" />
+                <span>Thêm Cookie</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBackendModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 font-semibold whitespace-nowrap transition cursor-pointer"
+              >
+                Cấu hình Backend
+              </button>
+            </div>
           </div>
         )}
 
@@ -634,6 +661,14 @@ function App() {
               <Server className="w-3.5 h-3.5 text-purple-400" />
               <span>Cấu hình Backend (Render)</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setIsCookieModalOpen(true)}
+              className="flex items-center gap-1.5 hover:text-amber-300 text-slate-400 transition cursor-pointer"
+            >
+              <Cookie className="w-3.5 h-3.5 text-amber-400" />
+              <span>YouTube Cookie {hasCookie ? '(Đã lưu)' : ''}</span>
+            </button>
           </div>
 
           <p className="text-[11px] text-slate-600">
@@ -668,6 +703,16 @@ function App() {
         isOpen={isBackendModalOpen}
         onClose={() => setIsBackendModalOpen(false)}
         onBackendSaved={() => loadVideoData(videoId)}
+      />
+
+      {/* Cookie Settings Modal */}
+      <CookieSettingsModal
+        isOpen={isCookieModalOpen}
+        onClose={() => setIsCookieModalOpen(false)}
+        onCookieUpdated={(val) => {
+          setHasCookie(!!val);
+          if (val) loadVideoData(videoId, selectedLang);
+        }}
       />
     </div>
   );

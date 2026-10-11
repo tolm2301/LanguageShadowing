@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LANGUAGES } from '../constants';
-import { Search, Link as LinkIcon, Sparkles, Clipboard, Check, Globe, Server } from 'lucide-react';
+import { Search, Link as LinkIcon, Sparkles, Clipboard, Check, Globe, Server, Cookie } from 'lucide-react';
 
 export default function HeaderInput({
   selectedLang,
@@ -10,6 +10,8 @@ export default function HeaderInput({
   onLoadVideo,
   isLoading,
   onOpenBackendSettings,
+  onOpenCookieSettings,
+  hasCookie,
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -70,6 +72,21 @@ export default function HeaderInput({
             >
               <Server className="w-3.5 h-3.5 text-purple-400" />
               <span className="hidden sm:inline">Backend Render</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenCookieSettings}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${
+                hasCookie
+                  ? 'bg-amber-950/40 border-amber-500/40 text-amber-300 hover:bg-amber-900/50 shadow-xs'
+                  : 'bg-slate-950/70 border-slate-800 hover:border-amber-500/50 text-slate-300 hover:text-white'
+              }`}
+              title="Cài đặt YouTube Cookie (Vượt chặn cào phụ đề)"
+            >
+              <Cookie className={`w-3.5 h-3.5 ${hasCookie ? 'text-amber-400' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">Cookie</span>
+              {hasCookie && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
             </button>
 
             <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
