@@ -1,9 +1,30 @@
-const { exec, spawn } = require('child_process');
+const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
 let cachedCommand = null;
+
+function downloadWithRedirects(url, dest, maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
+
+    const req = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return resolve(downloadWithRedirects(res.headers.location, dest, maxRedirects - 1));
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP status ${res.statusCode}`));
+      }
+      const file = fs.createWriteStream(dest);
+      res.pipe(file);
+      file.on('finish', () => {
+        file.close(() => resolve(dest));
+      });
+    });
+    req.on('error', reject);
+  });
+}
 
 /**
  * Find working yt-dlp command on this machine
@@ -11,22 +32,24 @@ let cachedCommand = null;
 async function getWorkingCommand() {
   if (cachedCommand) return cachedCommand;
 
+  const localBinary = path.join(process.cwd(), 'yt-dlp');
   const candidates = [
     'yt-dlp',
     'python3 -m yt_dlp',
     'python -m yt_dlp',
-    path.join(process.cwd(), 'yt-dlp')
+    localBinary,
+    `"${localBinary}"`
   ];
 
   for (const cmd of candidates) {
     try {
-      await new Promise((resolve, reject) => {
+      const version = await new Promise((resolve, reject) => {
         exec(`${cmd} --version`, { timeout: 4000 }, (err, stdout) => {
           if (err || !stdout.trim()) reject(err || new Error('empty version'));
           else resolve(stdout.trim());
         });
       });
-      console.log(`[yt-dlp] Found working command: "${cmd}"`);
+      console.log(`[yt-dlp] Found working command: "${cmd}" (v${version})`);
       cachedCommand = cmd;
       return cmd;
     } catch (e) {
@@ -34,12 +57,11 @@ async function getWorkingCommand() {
     }
   }
 
-  // If on Linux/Render and not found, try downloading standalone binary
+  // If on Linux/Render and not found yet, try downloading standalone binary
   if (process.platform === 'linux') {
-    const localBinary = path.join(process.cwd(), 'yt-dlp');
-    console.log('[yt-dlp] Standalone binary not found, downloading to:', localBinary);
+    console.log('[yt-dlp] Binary not found, downloading to:', localBinary);
     try {
-      await downloadLinuxBinary(localBinary);
+      await downloadWithRedirects('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', localBinary);
       fs.chmodSync(localBinary, 0o755);
       cachedCommand = localBinary;
       return localBinary;
@@ -51,33 +73,31 @@ async function getWorkingCommand() {
   throw new Error('yt-dlp is not available. Please install via pip: pip install -U yt-dlp');
 }
 
-function downloadLinuxBinary(destPath) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    https.get('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        https.get(res.headers.location, (redirectRes) => {
-          redirectRes.pipe(file);
-          file.on('finish', () => file.close(resolve));
-        }).on('error', reject);
-      } else {
-        res.pipe(file);
-        file.on('finish', () => file.close(resolve));
-      }
-    }).on('error', reject);
-  });
-}
-
 /**
  * Dump video metadata and captions using yt-dlp
  */
-async function getVideoMetadata(videoId) {
+async function getVideoMetadata(videoId, cookieString = null) {
   const cmd = await getWorkingCommand();
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const fullCmd = `${cmd} --dump-json --skip-download --no-warnings --no-playlist "${url}"`;
+  
+  const args = [
+    '--dump-json',
+    '--skip-download',
+    '--no-warnings',
+    '--no-playlist',
+    '--extractor-args', '"youtube:player_client=android,web"'
+  ];
+
+  if (cookieString && cookieString.trim()) {
+    // Escape double quotes in cookie string
+    const escaped = cookieString.replace(/"/g, '\\"');
+    args.push('--add-header', `"Cookie: ${escaped}"`);
+  }
+
+  const fullCmd = `${cmd} ${args.join(' ')} "${url}"`;
 
   return new Promise((resolve, reject) => {
-    exec(fullCmd, { maxBuffer: 25 * 1024 * 1024, timeout: 30000 }, (err, stdout, stderr) => {
+    exec(fullCmd, { maxBuffer: 35 * 1024 * 1024, timeout: 35000 }, (err, stdout, stderr) => {
       if (err) {
         return reject(new Error(`yt-dlp error: ${stderr || err.message}`));
       }

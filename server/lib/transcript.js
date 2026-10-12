@@ -328,13 +328,13 @@ async function getCaptionTracksAndroidVr(videoId, cookieString = '') {
   return [];
 }
 
-async function getVideoCaptionTracks(videoId, cookieInput = null) {
+async function getVideoCaptionTracks(videoId, cookieInput = null, errorsArray = null) {
   const { cookieString } = parseCookieInput(cookieInput || process.env.YOUTUBE_COOKIE);
 
   // Method 0 (Primary & Most Reliable Universal Extractor): yt-dlp
   try {
     const { getVideoMetadata } = require('./ytdlp');
-    const meta = await getVideoMetadata(videoId);
+    const meta = await getVideoMetadata(videoId, cookieString);
     if (meta) {
       const ytdlpTracks = [];
       const manual = meta.subtitles || {};
@@ -374,6 +374,9 @@ async function getVideoCaptionTracks(videoId, cookieInput = null) {
     }
   } catch (ytdlpErr) {
     console.warn('[yt-dlp] Extraction note:', ytdlpErr.message);
+    if (errorsArray && Array.isArray(errorsArray)) {
+      errorsArray.push(`yt-dlp error: ${ytdlpErr.message}`);
+    }
   }
 
   // Method 1 (Direct Android VR client - bypasses cloud datacenter bot protection):
@@ -698,11 +701,10 @@ async function fetchTranscript(videoId, targetLang = null, cookieInput = null) {
     }
   }
 
-  const tracks = await getVideoCaptionTracks(videoId, cookieInput);
+  let lastErrors = [];
+  const tracks = await getVideoCaptionTracks(videoId, cookieInput, lastErrors);
   let selectedTrack = null;
   let transcript = [];
-
-  let lastErrors = [];
 
   // Method 1 (Primary & Fastest): Direct baseUrl XML download from caption tracks
   if (tracks && tracks.length > 0) {

@@ -74,6 +74,16 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.get('/api/ytdlp-status', async (req, res) => {
+  try {
+    const { getWorkingCommand } = require('./lib/ytdlp');
+    const cmd = await getWorkingCommand();
+    res.json({ available: true, command: cmd });
+  } catch (err) {
+    res.json({ available: false, error: err.message });
+  }
+});
+
 // API: Get sample videos
 app.get('/api/samples', (req, res) => {
   res.json({ samples: SAMPLE_VIDEOS });
