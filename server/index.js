@@ -83,7 +83,7 @@ app.get('/api/debug-python', async (req, res) => {
   exec(cmd, { timeout: 20000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
     try {
       const data = JSON.parse(stdout);
-      res.json({ ok: true, dataLength: data.transcript?.length, dataPreview: data.transcript?.slice(0, 2), stderr });
+      res.json({ ok: true, data, stderr });
     } catch (pe) {
       res.json({ ok: false, parseError: pe.message, stdout: stdout.slice(0, 500), stderr });
     }
