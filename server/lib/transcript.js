@@ -45,13 +45,30 @@ function parseCookieInput(cookieInput) {
     if (!trimmed) return { cookieString: '', cookieArray: [] };
 
     // Check if JSON string
-    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    if (trimmed.startsWith('[') || trimmed.startsWith('{') || trimmed.includes('"name"') || trimmed.includes('"value"')) {
       try {
-        const parsed = JSON.parse(trimmed);
+        const parsed = JSON.parse(trimmed.replace(/\s*\.\s*$/, ''));
         if (Array.isArray(parsed)) {
           return parseCookieInput(parsed);
+        } else if (parsed && typeof parsed === 'object') {
+          return parseCookieInput([parsed]);
         }
-      } catch (e) {}
+      } catch (e) {
+        // Fallback: extract name/value via regex from malformed or partial JSON
+        const cookieArray = [];
+        const parts = [];
+        const jsonItemRegex = /"name"\s*:\s*"([^"]+)"[\s\S]*?"value"\s*:\s*"([^"]+)"/g;
+        let match;
+        while ((match = jsonItemRegex.exec(trimmed)) !== null) {
+          const name = match[1].trim();
+          const value = match[2].trim();
+          cookieArray.push({ name, value, domain: '.youtube.com', path: '/' });
+          parts.push(`${name}=${value}`);
+        }
+        if (cookieArray.length > 0) {
+          return { cookieString: parts.join('; '), cookieArray };
+        }
+      }
     }
 
     // Check Netscape format (tab-separated lines)

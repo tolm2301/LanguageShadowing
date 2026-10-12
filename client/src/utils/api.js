@@ -76,7 +76,7 @@ export async function verifyYtCookie(cookie, backendUrl) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ cookie }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(45000), // 45s to allow Render free tier to wake up
     });
     const data = await res.json();
     return data;
