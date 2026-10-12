@@ -180,11 +180,9 @@ function App() {
       const rawError = err.message || '';
       let displayError = rawError;
 
-      if (/IP-blocked|BotGuard|bot|Sign in|PoToken/i.test(rawError)) {
-        displayError = 'YouTube chặn máy chủ đám mây lấy phụ đề video này (BotGuard). Vui lòng bấm "Thêm Cookie YouTube" bên dưới để vượt chặn tự động.';
-      } else if (!rawError) {
+      if (!rawError || rawError.includes('Failed to fetch') || rawError.includes('NetworkError')) {
         displayError = backend
-          ? `Không thể kết nối đến Backend Render (${backend}). Máy chủ miễn phí có thể đang khởi động lại (mất ~30s).`
+          ? `Không thể kết nối đến Backend Render (${backend}). Máy chủ miễn phí có thể đang khởi động lại (mất ~25s), vui lòng thử lại sau giây lát.`
           : `Chưa kết nối Backend Render hoặc máy chủ chưa sẵn sàng. Bạn có thể bấm "Backend Render" ở góc trên để cài đặt link.`;
       }
 
@@ -590,18 +588,17 @@ function App() {
               <div>
                 <p className="font-bold">{errorMsg}</p>
                 <p className="text-amber-400/80 mt-0.5">
-                  Bạn có thể chọn bài học mẫu ở trên, hoặc thêm YouTube Cookie để mở khóa 100% video.
+                  Nếu máy chủ Backend Render vừa thức dậy sau thời gian chờ, bạn chỉ cần bấm "Thử tải lại" bên dưới.
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
               <button
                 type="button"
-                onClick={() => setIsCookieModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5"
+                onClick={() => loadVideoData(videoId, selectedLang)}
+                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold whitespace-nowrap transition cursor-pointer"
               >
-                <Cookie className="w-3.5 h-3.5 text-amber-400" />
-                <span>Thêm Cookie</span>
+                Thử tải lại
               </button>
               <button
                 type="button"
@@ -660,14 +657,6 @@ function App() {
             >
               <Server className="w-3.5 h-3.5 text-purple-400" />
               <span>Cấu hình Backend (Render)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsCookieModalOpen(true)}
-              className="flex items-center gap-1.5 hover:text-amber-300 text-slate-400 transition cursor-pointer"
-            >
-              <Cookie className="w-3.5 h-3.5 text-amber-400" />
-              <span>YouTube Cookie {hasCookie ? '(Đã lưu)' : ''}</span>
             </button>
           </div>
 

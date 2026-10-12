@@ -3,7 +3,7 @@ services:
     name: shadowing-backend
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: pip install -U yt-dlp || true && npm install
     startCommand: node server/index.js
     healthCheckPath: /api/health
     envVars:
