@@ -74,14 +74,16 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/api/ytdlp-status', async (req, res) => {
-  try {
-    const { getWorkingCommand } = require('./lib/ytdlp');
-    const cmd = await getWorkingCommand();
-    res.json({ available: true, command: cmd });
-  } catch (err) {
-    res.json({ available: false, error: err.message });
-  }
+app.get('/api/debug-python', async (req, res) => {
+  const { exec } = require('child_process');
+  const videoId = req.query.videoId || 'muCY-KBCJUQ';
+  exec(`python3 -m youtube_transcript_api ${videoId} || python -m youtube_transcript_api ${videoId}`, { timeout: 15000 }, (err, stdout, stderr) => {
+    if (err) {
+      res.json({ ok: false, error: err.message, stderr: stderr || '' });
+    } else {
+      res.json({ ok: true, outputLength: stdout.length, preview: stdout.slice(0, 300) });
+    }
+  });
 });
 
 app.get('/api/debug-ytdlp', async (req, res) => {

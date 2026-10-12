@@ -37,17 +37,17 @@ async function main() {
   }
 
   // 2. Try installing via pip
-  console.log('[postinstall] Attempting to install yt-dlp via pip...');
+  console.log('[postinstall] Attempting to install yt-dlp and youtube-transcript-api via pip...');
   for (const pipCmd of [
-    'pip install -U yt-dlp',
-    'pip3 install -U yt-dlp',
-    'python3 -m pip install -U yt-dlp',
-    'python -m pip install -U yt-dlp'
+    'pip install -U yt-dlp youtube-transcript-api',
+    'pip3 install -U yt-dlp youtube-transcript-api',
+    'python3 -m pip install -U yt-dlp youtube-transcript-api',
+    'python -m pip install -U yt-dlp youtube-transcript-api'
   ]) {
     try {
       execSync(pipCmd, { stdio: 'inherit' });
-      console.log(`[postinstall] Successfully installed yt-dlp using "${pipCmd}"`);
-      return;
+      console.log(`[postinstall] Successfully installed packages using "${pipCmd}"`);
+      break;
     } catch (e) {}
   }
 
