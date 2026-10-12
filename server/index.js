@@ -84,6 +84,42 @@ app.get('/api/ytdlp-status', async (req, res) => {
   }
 });
 
+app.get('/api/debug-ytdlp', async (req, res) => {
+  const { exec } = require('child_process');
+  const { getWorkingCommand } = require('./lib/ytdlp');
+  const videoId = req.query.videoId || 'muCY-KBCJUQ';
+  try {
+    const cmd = await getWorkingCommand();
+    const tests = [
+      `${cmd} --dump-json --skip-download --no-warnings --extractor-args "youtube:player_client=android;player_skip=webpage,configs" "https://www.youtube.com/watch?v=${videoId}"`,
+      `${cmd} --dump-json --skip-download --no-warnings --extractor-args "youtube:player_client=android" "https://www.youtube.com/watch?v=${videoId}"`,
+      `${cmd} --dump-json --skip-download --no-warnings "https://www.youtube.com/watch?v=${videoId}"`,
+    ];
+
+    const results = [];
+    for (const t of tests) {
+      const r = await new Promise(resolve => {
+        exec(t, { maxBuffer: 15 * 1024 * 1024, timeout: 20000 }, (err, stdout, stderr) => {
+          if (err) {
+            resolve({ cmd: t, ok: false, error: err.message, stderr: stderr ? stderr.slice(0, 300) : '' });
+          } else {
+            try {
+              const j = JSON.parse(stdout);
+              resolve({ cmd: t, ok: true, autos: Object.keys(j.automatic_captions || {}), manuals: Object.keys(j.subtitles || {}) });
+            } catch (pe) {
+              resolve({ cmd: t, ok: false, parseError: pe.message, stdout: stdout.slice(0, 200) });
+            }
+          }
+        });
+      });
+      results.push(r);
+    }
+    res.json({ videoId, results });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 // API: Get sample videos
 app.get('/api/samples', (req, res) => {
   res.json({ samples: SAMPLE_VIDEOS });
