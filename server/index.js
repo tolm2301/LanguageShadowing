@@ -77,8 +77,8 @@ app.get('/api/health', (req, res) => {
 app.get('/api/debug-python', async (req, res) => {
   const { exec } = require('child_process');
   const videoId = req.query.videoId || 'muCY-KBCJUQ';
-  exec(`pip install -U youtube-transcript-api --break-system-packages && python3 -m youtube_transcript_api ${videoId}`, { timeout: 40000 }, (err, stdout, stderr) => {
-    res.json({ ok: !err, err: err ? err.message : null, stdoutLength: stdout.length, preview: stdout.slice(0, 300), stderr });
+  exec(`python3 -m youtube_transcript_api ${videoId}`, { timeout: 20000 }, (err, stdout, stderr) => {
+    res.json({ ok: !err, err: err ? err.message : null, stdoutLength: stdout.length, preview: stdout.slice(0, 500), end: stdout.slice(-500), stderr });
   });
 });
 
