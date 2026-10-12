@@ -76,9 +76,17 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/debug-python', async (req, res) => {
   const { exec } = require('child_process');
+  const path = require('path');
   const videoId = req.query.videoId || 'muCY-KBCJUQ';
-  exec(`python3 -m youtube_transcript_api ${videoId}`, { timeout: 20000 }, (err, stdout, stderr) => {
-    res.json({ ok: !err, err: err ? err.message : null, stdoutLength: stdout.length, preview: stdout.slice(0, 500), end: stdout.slice(-500), stderr });
+  const scriptPath = path.join(__dirname, 'lib', 'get_transcript.py');
+  const cmd = `python3 "${scriptPath}" ${videoId} en || python "${scriptPath}" ${videoId} en`;
+  exec(cmd, { timeout: 20000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    try {
+      const data = JSON.parse(stdout);
+      res.json({ ok: true, dataLength: data.transcript?.length, dataPreview: data.transcript?.slice(0, 2), stderr });
+    } catch (pe) {
+      res.json({ ok: false, parseError: pe.message, stdout: stdout.slice(0, 500), stderr });
+    }
   });
 });
 
