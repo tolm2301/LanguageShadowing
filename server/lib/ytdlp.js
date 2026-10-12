@@ -79,21 +79,44 @@ async function getWorkingCommand() {
 async function getVideoMetadata(videoId, cookieString = null) {
   const cmd = await getWorkingCommand();
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  
-  const args = [
+
+  // Method A (Android client without webpage fetch - bypasses cloud datacenter bot protection):
+  const argsA = [
     '--dump-json',
     '--skip-download',
     '--no-warnings',
     '--no-playlist',
-    '--extractor-args', '"youtube:player_client=android,web"'
+    '--extractor-args', '"youtube:player_client=android;player_skip=webpage,configs"'
   ];
 
   if (cookieString && cookieString.trim()) {
-    // Escape double quotes in cookie string
     const escaped = cookieString.replace(/"/g, '\\"');
-    args.push('--add-header', `"Cookie: ${escaped}"`);
+    argsA.push('--add-header', `"Cookie: ${escaped}"`);
   }
 
+  try {
+    return await executeYtDlp(cmd, argsA, url);
+  } catch (errA) {
+    console.warn('[yt-dlp] Direct android extraction failed, trying fallback client:', errA.message);
+
+    // Method B fallback: android client with web configs
+    const argsB = [
+      '--dump-json',
+      '--skip-download',
+      '--no-warnings',
+      '--no-playlist',
+      '--extractor-args', '"youtube:player_client=android"'
+    ];
+    if (cookieString && cookieString.trim()) {
+      const escaped = cookieString.replace(/"/g, '\\"');
+      argsB.push('--add-header', `"Cookie: ${escaped}"`);
+    }
+
+    return await executeYtDlp(cmd, argsB, url);
+  }
+}
+
+function executeYtDlp(cmd, args, url) {
   const fullCmd = `${cmd} ${args.join(' ')} "${url}"`;
 
   return new Promise((resolve, reject) => {
