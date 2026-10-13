@@ -1,10 +1,11 @@
 import { LANGUAGES } from '../constants';
+import sampleLessons from '../data/sampleLessons.json';
 
 export const STORAGE_KEYS = {
   CURRENT_LANG: 'shadowing_current_lang',
   LANG_VIDEOS: 'shadowing_lang_videos',
   CONFIG: 'shadowing_learning_config',
-  YT_COOKIE: 'shadowing_yt_cookie',
+  CUSTOM_TRANSCRIPTS: 'shadowing_custom_transcripts',
 };
 
 // Default initial videos mapping for all 5 languages
@@ -110,24 +111,66 @@ export function saveConfig(updates) {
   }
 }
 
-// Read YouTube cookie
-export function getSavedYtCookie() {
-  try {
-    return localStorage.getItem(STORAGE_KEYS.YT_COOKIE) || '';
-  } catch (e) {
-    return '';
+// Read transcript: first check sampleLessons cache, then check localStorage
+export function getTranscriptForVideo(videoId, lang = 'en') {
+  if (!videoId) return null;
+
+  // 1. Check embedded pre-translated sample lessons
+  if (sampleLessons[videoId] && sampleLessons[videoId].transcript) {
+    return {
+      videoId,
+      title: sampleLessons[videoId].title,
+      author: sampleLessons[videoId].author,
+      thumbnail: sampleLessons[videoId].thumbnail,
+      transcript: sampleLessons[videoId].transcript,
+      isSample: true,
+    };
   }
+
+  // 2. Check localStorage custom transcripts
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_TRANSCRIPTS);
+    if (saved) {
+      const all = JSON.parse(saved);
+      const key = `${videoId}_${lang}`;
+      if (all[key]) {
+        return all[key];
+      }
+      // fallback check by videoId only
+      if (all[videoId]) {
+        return all[videoId];
+      }
+    }
+  } catch (e) {
+    console.warn('Cannot read custom transcript from localStorage', e);
+  }
+
+  return null;
 }
 
-// Save YouTube cookie
-export function saveYtCookie(cookieStr) {
+// Save custom transcript for a video to localStorage
+export function saveCustomTranscript(videoId, lang, transcriptData) {
+  if (!videoId || !transcriptData) return;
   try {
-    if (!cookieStr || !cookieStr.trim()) {
-      localStorage.removeItem(STORAGE_KEYS.YT_COOKIE);
-    } else {
-      localStorage.setItem(STORAGE_KEYS.YT_COOKIE, cookieStr.trim());
+    let all = {};
+    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_TRANSCRIPTS);
+    if (saved) {
+      all = JSON.parse(saved);
     }
-  } catch (e) {}
+    const key = `${videoId}_${lang || 'en'}`;
+    all[key] = {
+      videoId,
+      lang: lang || 'en',
+      title: transcriptData.title || `Video ${videoId}`,
+      author: transcriptData.author || '',
+      thumbnail: transcriptData.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      transcript: transcriptData.transcript || [],
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_TRANSCRIPTS, JSON.stringify(all));
+  } catch (e) {
+    console.warn('Cannot save custom transcript to localStorage', e);
+  }
 }
 
 // Clear all and reset
@@ -136,7 +179,7 @@ export function clearAllSavedData() {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_LANG);
     localStorage.removeItem(STORAGE_KEYS.LANG_VIDEOS);
     localStorage.removeItem(STORAGE_KEYS.CONFIG);
-    localStorage.removeItem(STORAGE_KEYS.YT_COOKIE);
+    localStorage.removeItem(STORAGE_KEYS.CUSTOM_TRANSCRIPTS);
   } catch (e) {
     console.warn('Cannot clear localStorage', e);
   }

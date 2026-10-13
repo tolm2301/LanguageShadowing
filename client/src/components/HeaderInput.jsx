@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LANGUAGES } from '../constants';
-import { Search, Link as LinkIcon, Sparkles, Clipboard, Check, Globe, Server, Cookie } from 'lucide-react';
+import { Search, Link as LinkIcon, Sparkles, Clipboard, Check, FileText } from 'lucide-react';
 
 export default function HeaderInput({
   selectedLang,
@@ -9,9 +9,7 @@ export default function HeaderInput({
   setInputUrl,
   onLoadVideo,
   isLoading,
-  onOpenBackendSettings,
-  onOpenCookieSettings,
-  hasCookie,
+  onOpenPasteSubModal,
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -62,19 +60,19 @@ export default function HeaderInput({
           </div>
         </div>
 
-          {/* Language Selector & Backend Server Config */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={onOpenBackendSettings}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-purple-500/50 text-slate-300 hover:text-white text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
-              title="Cấu hình kết nối Backend Render"
-            >
-              <Server className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Backend Render</span>
-            </button>
+        {/* Action Buttons & Language Selector */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={onOpenPasteSubModal}
+            className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+            title="Dán phụ đề hoặc lời thoại có mốc thời gian"
+          >
+            <FileText className="w-3.5 h-3.5 text-amber-400" />
+            <span>+ Dán phụ đề / SRT</span>
+          </button>
 
-            <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
             {LANGUAGES.map((lang) => {
               const isActive = selectedLang === lang.code;
               return (
@@ -154,7 +152,7 @@ export default function HeaderInput({
         {/* Quick Sample Clips for instant trial */}
         <div className="flex items-center gap-2 mt-3 overflow-x-auto py-1 text-xs">
           <span className="text-slate-400 flex items-center gap-1 shrink-0 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Video mẫu có sẵn phụ đề:
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Bài mẫu có sẵn:
           </span>
           <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
             {LANGUAGES.map((item) => (
@@ -162,7 +160,7 @@ export default function HeaderInput({
                 key={item.code}
                 type="button"
                 onClick={() => handleSelectSample(item)}
-                className="px-2.5 py-1 rounded-lg bg-slate-800/60 hover:bg-slate-750 text-slate-300 hover:text-white text-xs border border-slate-700/50 transition flex items-center gap-1 shrink-0 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white text-xs border border-slate-700/50 transition flex items-center gap-1 shrink-0 cursor-pointer"
               >
                 <span>{item.flag}</span>
                 <span>{item.name}</span>

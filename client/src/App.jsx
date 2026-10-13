@@ -5,10 +5,9 @@ import RangeBar from './components/RangeBar';
 import SubtitleSection from './components/SubtitleSection';
 import TranscriptDrawer from './components/TranscriptDrawer';
 import ShortcutsModal from './components/ShortcutsModal';
-import BackendSettingsModal from './components/BackendSettingsModal';
-import CookieSettingsModal from './components/CookieSettingsModal';
+import PasteSubtitleModal from './components/PasteSubtitleModal';
 import { LANGUAGES, formatTime, PLAYBACK_SPEEDS } from './constants';
-import { getApiEndpoint, getBackendUrl, getApiHeaders } from './utils/api';
+import { extractVideoId, fetchVideoMeta } from './utils/subtitleParser';
 import {
   getSavedCurrentLang,
   saveCurrentLang,
@@ -16,18 +15,15 @@ import {
   saveVideoForLanguage,
   getSavedConfig,
   saveConfig,
-  getSavedYtCookie,
+  getTranscriptForVideo,
 } from './utils/storage';
 import {
   Keyboard,
   FileText,
   AlertCircle,
   HelpCircle,
-  Volume2,
   ExternalLink,
-  Info,
-  Server,
-  Cookie,
+  Sparkles,
 } from 'lucide-react';
 
 function App() {
@@ -59,7 +55,6 @@ function App() {
   const [errorMsg, setErrorMsg] = useState('');
 
   // Duration & Range state
-  const [selectedDuration, setSelectedDuration] = useState(60);
   const [rangeStart, setRangeStart] = useState(currentLangVideo.rangeStart || 0);
   const [rangeEnd, setRangeEnd] = useState(currentLangVideo.rangeEnd || 60);
   const [loopRange, setLoopRange] = useState(!!savedConfig.loopRange);
@@ -82,20 +77,9 @@ function App() {
   // Modals state
   const [isTranscriptDrawerOpen, setIsTranscriptDrawerOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
-  const [isBackendModalOpen, setIsBackendModalOpen] = useState(false);
-  const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
-  const [hasCookie, setHasCookie] = useState(!!getSavedYtCookie());
+  const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
 
   const playerRef = useRef(null);
-
-  // Helper to extract video ID
-  const extractId = (urlOrId) => {
-    if (!urlOrId) return '';
-    const clean = urlOrId.trim();
-    if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) return clean;
-    const match = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
-    return match ? match[1] : '';
-  };
 
   // Load Transcript and Video Info
   const loadVideoData = useCallback(async (vId, langCode) => {
@@ -107,90 +91,40 @@ function App() {
     setLoopSentence(false);
     playerRef.current?.pause();
 
-    try {
-      // 1. Fetch Video Info (with browser oEmbed fallback)
-      fetch(getApiEndpoint(`/api/video-info?videoId=${vId}`))
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && data.title) {
-            setVideoInfo(data);
-            saveVideoForLanguage(langCode || selectedLang, {
-              title: data.title,
-              author_name: data.author_name || data.author,
-            });
-          } else {
-            // Direct client fallback to YouTube oEmbed
-            fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${vId}&format=json`)
-              .then((r) => (r.ok ? r.json() : null))
-              .then((oembed) => {
-                if (oembed && oembed.title) {
-                  const fallbackInfo = {
-                    videoId: vId,
-                    title: oembed.title,
-                    author: oembed.author_name || '',
-                    thumbnail: oembed.thumbnail_url || `https://i.ytimg.com/vi/${vId}/hqdefault.jpg`,
-                  };
-                  setVideoInfo(fallbackInfo);
-                  saveVideoForLanguage(langCode || selectedLang, {
-                    title: fallbackInfo.title,
-                    author_name: fallbackInfo.author,
-                  });
-                }
-              })
-              .catch(() => {});
-          }
-        })
-        .catch(() => {});
+    const targetLang = langCode || selectedLang;
 
-      // 2. Fetch Transcript
-      const resp = await fetch(getApiEndpoint(`/api/transcript?videoId=${vId}&lang=${langCode || selectedLang}`), {
-        headers: getApiHeaders(),
-      });
-      
-      const contentType = resp.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(
-          `Máy chủ API trả về mã HTTP ${resp.status} (không phải JSON). Vui lòng kiểm tra lại dịch vụ Backend trên Render.`
-        );
+    // 1. Fetch Video Info via CORS noembed
+    fetchVideoMeta(vId).then((meta) => {
+      if (meta) {
+        setVideoInfo(meta);
+        saveVideoForLanguage(targetLang, {
+          title: meta.title,
+          author_name: meta.author,
+        });
       }
+    });
 
-      const data = await resp.json();
-
-      if (!resp.ok && data?.error) {
-        throw new Error(data.error);
+    // 2. Check if transcript exists in sampleLessons or localStorage
+    const cached = getTranscriptForVideo(vId, targetLang);
+    if (cached && cached.transcript && cached.transcript.length > 0) {
+      setTranscript(cached.transcript);
+      if (cached.title) {
+        setVideoInfo((prev) => ({
+          ...prev,
+          title: cached.title,
+          author_name: cached.author || prev.author_name,
+        }));
       }
-
-      if (data.transcript && data.transcript.length > 0) {
-        setTranscript(data.transcript);
-        setErrorMsg('');
-        if (data.transcript[0]?.start !== undefined) {
-          playerRef.current?.seekTo(data.transcript[0].start, true);
-        }
-      } else {
-        setTranscript([]);
-        if (data.error) {
-          setErrorMsg(data.error);
-        } else {
-          setErrorMsg('Không tìm thấy phụ đề tự động trên YouTube cho ngôn ngữ này. Vui lòng chọn video khác có phụ đề.');
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching transcript:', err);
-      const backend = getBackendUrl();
-      const rawError = err.message || '';
-      let displayError = rawError;
-
-      if (!rawError || rawError.includes('Failed to fetch') || rawError.includes('NetworkError')) {
-        displayError = backend
-          ? `Không thể kết nối đến Backend Render (${backend}). Máy chủ miễn phí có thể đang khởi động lại (mất ~25s), vui lòng thử lại sau giây lát.`
-          : `Chưa kết nối Backend Render hoặc máy chủ chưa sẵn sàng. Bạn có thể bấm "Backend Render" ở góc trên để cài đặt link.`;
-      }
-
-      setErrorMsg(displayError);
-      setTranscript([]);
-    } finally {
       setIsLoading(false);
+      if (cached.transcript[0]?.start !== undefined) {
+        playerRef.current?.seekTo(cached.transcript[0].start, true);
+      }
+      return;
     }
+
+    // 3. Video does not have subtitles yet
+    setIsLoading(false);
+    setErrorMsg('Video này chưa có dữ liệu phụ đề. Hãy bấm "+ Dán phụ đề / SRT" để thêm lời thoại và học ngay!');
   }, [selectedLang]);
 
   // Initial load on startup
@@ -200,7 +134,7 @@ function App() {
 
   // Handle URL submit
   const handleLoadVideo = (url, langOverride) => {
-    const id = extractId(url);
+    const id = extractVideoId(url);
     if (!id) {
       setErrorMsg('Đường dẫn YouTube không hợp lệ!');
       return;
@@ -235,23 +169,6 @@ function App() {
     } else {
       loadVideoData(videoId, langCode);
     }
-  };
-
-  // Handle Duration preset change (30s, 1m, 2m, All)
-  const handleSelectDuration = (seconds) => {
-    setSelectedDuration(seconds);
-    let s = 0;
-    let e = 60;
-    if (seconds === 0) {
-      s = 0;
-      e = videoDuration || 3600;
-    } else {
-      s = Math.floor(currentTime);
-      e = s + seconds;
-    }
-    setRangeStart(s);
-    setRangeEnd(e);
-    saveVideoForLanguage(selectedLang, { rangeStart: s, rangeEnd: e });
   };
 
   const handleChangeRange = (start, end) => {
@@ -406,13 +323,22 @@ function App() {
   };
 
   // Auto-paused trigger callback from YouTubePlayer
-  const handleAutoPaused = (sub) => {
+  const handleAutoPaused = () => {
     setIsAutoPaused(true);
   };
 
   const handleResumeAfterAutoPause = () => {
     setIsAutoPaused(false);
     playerRef.current?.play();
+  };
+
+  // When subtitles loaded from PasteSubtitleModal
+  const handleSubtitlesLoaded = (newItems) => {
+    setTranscript(newItems);
+    setErrorMsg('');
+    if (newItems.length > 0 && newItems[0]?.start !== undefined) {
+      playerRef.current?.seekTo(newItems[0].start, true);
+    }
   };
 
   // Keyboard shortcuts listener
@@ -529,9 +455,7 @@ function App() {
           setInputUrl={setInputUrl}
           onLoadVideo={handleLoadVideo}
           isLoading={isLoading}
-          onOpenBackendSettings={() => setIsBackendModalOpen(true)}
-          onOpenCookieSettings={() => setIsCookieModalOpen(true)}
-          hasCookie={hasCookie}
+          onOpenPasteSubModal={() => setIsPasteModalOpen(true)}
         />
 
         {/* Video Info Title Banner */}
@@ -546,7 +470,7 @@ function App() {
           </div>
         )}
 
-        {/* MIDDLE: YouTube Video Player (matching wireframe) */}
+        {/* MIDDLE: YouTube Video Player */}
         <div className="relative mb-5">
           <YouTubePlayer
             videoId={videoId}
@@ -580,7 +504,7 @@ function App() {
           onSeek={handleSeek}
         />
 
-        {/* Subtitle Warning Banner if no auto-captions */}
+        {/* Subtitle Warning / Prompt Banner if video has no subtitles */}
         {errorMsg && (
           <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-300">
             <div className="flex items-start gap-3">
@@ -588,24 +512,18 @@ function App() {
               <div>
                 <p className="font-bold">{errorMsg}</p>
                 <p className="text-amber-400/80 mt-0.5">
-                  Nếu máy chủ Backend Render vừa thức dậy sau thời gian chờ, bạn chỉ cần bấm "Thử tải lại" bên dưới.
+                  Bạn có thể lấy lời thoại từ nút "Hiện bản chép lời" trên YouTube hoặc qua DownSub trong 5 giây.
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
               <button
                 type="button"
-                onClick={() => loadVideoData(videoId, selectedLang)}
-                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold whitespace-nowrap transition cursor-pointer"
+                onClick={() => setIsPasteModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
               >
-                Thử tải lại
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsBackendModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 font-semibold whitespace-nowrap transition cursor-pointer"
-              >
-                Cấu hình Backend
+                <FileText className="w-3.5 h-3.5 text-slate-950" />
+                <span>+ Dán phụ đề / SRT ngay</span>
               </button>
             </div>
           </div>
@@ -630,6 +548,7 @@ function App() {
           isAutoPaused={isAutoPaused}
           onResumeAfterAutoPause={handleResumeAfterAutoPause}
           onOpenTranscriptDrawer={() => setIsTranscriptDrawerOpen(true)}
+          onOpenPasteSubModal={() => setIsPasteModalOpen(true)}
           selectedLang={selectedLang}
           isBlindMode={isBlindMode}
           onToggleBlindMode={handleToggleBlindMode}
@@ -652,11 +571,11 @@ function App() {
             </button>
             <button
               type="button"
-              onClick={() => setIsBackendModalOpen(true)}
-              className="flex items-center gap-1.5 hover:text-purple-300 text-slate-400 transition cursor-pointer"
+              onClick={() => setIsPasteModalOpen(true)}
+              className="flex items-center gap-1.5 hover:text-amber-300 text-amber-400/80 transition cursor-pointer"
             >
-              <Server className="w-3.5 h-3.5 text-purple-400" />
-              <span>Cấu hình Backend (Render)</span>
+              <FileText className="w-3.5 h-3.5 text-amber-400" />
+              <span>Dán / Quản lý phụ đề</span>
             </button>
           </div>
 
@@ -687,21 +606,14 @@ function App() {
         onClose={() => setIsShortcutsModalOpen(false)}
       />
 
-      {/* Backend Settings Modal */}
-      <BackendSettingsModal
-        isOpen={isBackendModalOpen}
-        onClose={() => setIsBackendModalOpen(false)}
-        onBackendSaved={() => loadVideoData(videoId)}
-      />
-
-      {/* Cookie Settings Modal */}
-      <CookieSettingsModal
-        isOpen={isCookieModalOpen}
-        onClose={() => setIsCookieModalOpen(false)}
-        onCookieUpdated={(val) => {
-          setHasCookie(!!val);
-          if (val) loadVideoData(videoId, selectedLang);
-        }}
+      {/* Paste Subtitle Modal */}
+      <PasteSubtitleModal
+        isOpen={isPasteModalOpen}
+        onClose={() => setIsPasteModalOpen(false)}
+        videoId={videoId}
+        videoUrl={inputUrl}
+        selectedLang={selectedLang}
+        onSubtitlesLoaded={handleSubtitlesLoaded}
       />
     </div>
   );

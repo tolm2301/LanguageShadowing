@@ -14,10 +14,9 @@ import {
   Copy,
   Check,
   Languages,
-  BookOpen,
   Sparkles,
   Columns,
-  MessageSquare
+  FileText
 } from 'lucide-react';
 
 export default function SubtitleSection({
@@ -38,6 +37,7 @@ export default function SubtitleSection({
   isAutoPaused = false,
   onResumeAfterAutoPause,
   onOpenTranscriptDrawer,
+  onOpenPasteSubModal,
   selectedLang = 'en',
   isBlindMode: propBlindMode,
   onToggleBlindMode,
@@ -127,7 +127,7 @@ export default function SubtitleSection({
       {/* Top Header: View Tabs & Utilities */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-800/80">
         {/* Tabs: Song song 2 bên | Phụ đề gốc | Dịch tiếng Việt */}
-        <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800 flex-wrap">
           <button
             type="button"
             onClick={() => changeActiveTab('bilingual')}
@@ -166,8 +166,19 @@ export default function SubtitleSection({
           </button>
         </div>
 
-        {/* Right Utilities: Luyện nghe mù & Toàn bộ kịch bản */}
-        <div className="flex items-center gap-2">
+        {/* Right Utilities: Luyện nghe mù & Dán phụ đề & Toàn bộ kịch bản */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Quick Paste/Edit Subtitles */}
+          <button
+            type="button"
+            onClick={onOpenPasteSubModal}
+            className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+            title="Dán phụ đề hoặc cập nhật lời thoại"
+          >
+            <FileText className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Dán phụ đề</span>
+          </button>
+
           {/* Blind Mode Toggle */}
           <button
             type="button"
@@ -192,11 +203,12 @@ export default function SubtitleSection({
           <button
             type="button"
             onClick={onOpenTranscriptDrawer}
-            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+            disabled={transcript.length === 0}
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
             title="Xem toàn bộ danh sách phụ đề"
           >
             <List className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Toàn bộ kịch bản ({transcript.length})</span>
+            <span className="hidden sm:inline">Kịch bản ({transcript.length})</span>
           </button>
         </div>
       </div>
@@ -209,7 +221,7 @@ export default function SubtitleSection({
             : 'grid-cols-1'
         }`}
       >
-        {/* LEFT CARD: PHỤ ĐỀ (Bỏ chữ Shadowing theo yêu cầu người dùng, KHÔNG có Pinyin) */}
+        {/* LEFT CARD: PHỤ ĐỀ GỐC */}
         {(activeTab === 'bilingual' || activeTab === 'original') && (
           <div className="flex flex-col bg-slate-950/80 border border-slate-800 rounded-2xl p-5 shadow-lg">
             {/* Header: PHỤ ĐỀ */}
@@ -289,7 +301,7 @@ export default function SubtitleSection({
                 </p>
               )}
 
-              {/* Active Sentence (High contrast hero font) */}
+              {/* Active Sentence */}
               {activeSubtitle ? (
                 <div className="my-1">
                   {isBlindMode && !isRevealed ? (
@@ -320,11 +332,21 @@ export default function SubtitleSection({
                   )}
                 </div>
               ) : (
-                <div className="py-6 text-center text-slate-500 text-xs">
+                <div className="py-6 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
                   {transcript.length > 0 ? (
                     <span>Đang chờ câu thoại tiếp theo...</span>
                   ) : (
-                    <p className="text-slate-400">Chưa có phụ đề cho video này.</p>
+                    <>
+                      <span>Video này chưa có dữ liệu phụ đề.</span>
+                      <button
+                        type="button"
+                        onClick={onOpenPasteSubModal}
+                        className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer mt-1"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-amber-400" />
+                        <span>+ Dán phụ đề / SRT để học ngay</span>
+                      </button>
+                    </>
                   )}
                 </div>
               )}
@@ -382,7 +404,8 @@ export default function SubtitleSection({
               <button
                 type="button"
                 onClick={onToggleLoopSentence}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                disabled={transcript.length === 0}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40 ${
                   loopSentence
                     ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-1 ring-emerald-400'
                     : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
@@ -396,7 +419,7 @@ export default function SubtitleSection({
           </div>
         )}
 
-        {/* RIGHT CARD: DỊCH SANG TIẾNG VIỆT & PINYIN (Pinyin đặt tại phần dịch hỗ trợ) */}
+        {/* RIGHT CARD: DỊCH SANG TIẾNG VIỆT & PINYIN */}
         {(activeTab === 'bilingual' || activeTab === 'vietnamese') && (
           <div className="flex flex-col bg-slate-950/80 border border-slate-800 rounded-2xl p-5 shadow-lg">
             {/* Header: DỊCH SANG TIẾNG VIỆT */}
@@ -520,7 +543,7 @@ export default function SubtitleSection({
         )}
       </div>
 
-      {/* Bottom Ergonomic Control Bar: Speed & Echo Mode (Replacing the old repeat 5s|10s|15s) */}
+      {/* Bottom Ergonomic Control Bar: Speed & Echo Mode */}
       <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-slate-950/60 p-4 rounded-2xl border border-slate-800/60">
         {/* Playback Speed Selector */}
         <div className="flex items-center gap-3 flex-wrap">
